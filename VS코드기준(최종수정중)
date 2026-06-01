@@ -351,75 +351,100 @@ if __name__ == "__main__":
 # =========================================================
 def ipo_assistant(audio):
 
-    recognized_text = transcribe(audio)
+    try:
 
-    print("📝 인식된 텍스트:", recognized_text)
+        # =========================
+        # 1. 녹음 안 된 경우
+        # =========================
+        if audio is None:
+            return (
+                "",
+                "녹음이 안 됐어요. 다시 시도해 주세요.",
+                None
+            )
 
-    # =========================
-    # 공모주 조회
-    # =========================
-    if "공모주" in recognized_text or "이번주" in recognized_text:
+        # =========================
+        # 2. STT
+        # =========================
+        recognized_text = transcribe(audio)
 
-        items = fetch_ipo()
+        print("📝 인식된 텍스트:", recognized_text)
 
-        if not items:
-            answer = "공모주 일정을 가져오지 못했습니다."
+        # STT 실패
+        if not recognized_text:
+            return (
+                "",
+                "음성을 인식하지 못했습니다. 다시 말씀해 주세요.",
+                None
+            )
+
+        # =========================
+        # 3. 기존 답변 로직
+        # =========================
+
+        if "공모주" in recognized_text or "이번주" in recognized_text:
+            items = fetch_ipo()
+            if not items:
+                answer = "공모주 일정을 가져오지 못했습니다."
+
+            else:
+                answer = "📈 공모주 일정입니다.\n\n"
+                for item in items:
+                    answer += (
+                        f"기업명 : {item['name']}\n"
+                        f"청약기간 : {item['start']} ~ {item['end']}\n"
+                        f"주간사 : {item['underwriter']}\n\n"
+                    )
+
+        elif "회의 등록" in recognized_text:
+
+            save_schedule(
+                "팀회의",
+                datetime(2026, 6, 2, 15, 0)
+            )
+
+            answer = "팀회의 일정이 등록되었습니다."
+
+        elif "일정" in recognized_text:
+
+            schedules = load_schedule(
+                datetime(2026, 6, 2)
+            )
+
+            if not schedules:
+                answer = "등록된 일정이 없습니다."
+
+            else:
+
+                answer = "📅 등록된 일정입니다.\n\n"
+
+                for s in schedules:
+                    answer += f"{s['title']}\n"
 
         else:
-            answer = "📈 공모주 일정입니다.\n\n"
 
-            for item in items:
-                answer += (
-                    f"기업명 : {item['name']}\n"
-                    f"청약기간 : {item['start']} ~ {item['end']}\n"
-                    f"주간사 : {item['underwriter']}\n\n"
-                )
+            answer = (
+                "죄송해요. "
+                "공모주 일정 또는 일정 등록만 가능합니다."
+            )
 
-    # =========================
-    # 일정 등록
-    # =========================
-    elif "회의 등록" in recognized_text:
+        response_audio = speak(answer)
 
-        save_schedule(
-            "팀회의",
-            datetime(2026, 6, 2, 15, 0)
+        return (
+            recognized_text,
+            answer,
+            response_audio
         )
 
-        answer = "팀회의 일정이 등록되었습니다."
+    except Exception as e:
 
-    # =========================
-    # 일정 조회
-    # =========================
-    elif "일정 뭐야" in recognized_text:
+        print("❌ ipo_assistant 오류:", e)
 
-        schedules = load_schedule(
-            datetime(2026, 6, 2)
+        return (
+            "",
+            f"오류가 발생했습니다. ({str(e)})",
+            None
         )
-        if not schedules:
-            answer = "등록된 일정이 없습니다."
-
-        else:
-            answer = "📅 등록된 일정입니다.\n\n"
-            for s in schedules:
-                answer += (
-                    f"{s['title']}\n"
-                )
-
-    else:
-        answer = f"""
-죄송해요. 질문을 이해하지 못했어요.
-공모주 일정 관련 질문만 답변할 수 있어요.
-"""
-
-    # -----------------------------------------------------
-    # 3. 답변 → 음성(TTS)
-    # -----------------------------------------------------
-    response_audio = speak(answer)
-
-    # -----------------------------------------------------
-    # 4. 결과 반환
-    # -----------------------------------------------------
-    return recognized_text, answer, response_audio
 
 # =========================================================
 # 🎨 Gradio UI
