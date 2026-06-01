@@ -743,9 +743,8 @@ def ipo_assistant(audio):
 
         elif intent == INTENT_VIEW:
 
-            schedules = load_schedule(
-                datetime(2026, 6, 2)
-            )
+            target_date = parse_kr_datetime(recognized_text)
+            schedules = load_schedule(target_date)
 
             if not schedules:
                 answer = "등록된 일정이 없습니다."
@@ -755,7 +754,15 @@ def ipo_assistant(audio):
                 answer = "📅 등록된 일정입니다.\n\n"
 
                 for s in schedules:
-                    answer += f"{s['title']}\n"
+
+                    dt = datetime.fromisoformat(
+                        s["datetime"]
+                    )
+
+                    answer += (
+                        f"- {dt.strftime('%H:%M')} "
+                        f"{s['title']}\n"
+                        )
 
         else:
 
