@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 import urllib3
@@ -23,7 +23,25 @@ class LegacyKeyExchangeAdapter(HTTPAdapter):
             num_pools=connections, maxsize=maxsize, block=block, ssl_context=ctx, **pool_kwargs
         )
 
-def crawl_ipo_schedule():
+# ─── [요구사항 2] 함수 변경 및 list[dict] 반환 구조 ───
+def fetch_ipo(force_refresh=False) -> list[dict]:
+    """
+    38커뮤니케이션에서 공모주 일정을 가져옵니다.
+    force_refresh=False 이면 기존 캐시 파일(ipo_cache.json)이 있을 때 파일에서 읽어오고,
+    True 이면 무조건 새로 크롤링합니다.
+    """
+    cache_filename = "ipo_cache.json"
+    
+    # 1. 강제 갱신이 아니고 캐시 파일이 존재하면 기존 데이터 반환 (서버 부하 및 차단 방지)
+    if not force_refresh and os.path.exists(cache_filename):
+        try:
+            with open(cache_filename, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("items", [])
+        except:
+            pass # 파일 읽기 실패 시 아래 크롤링 로직으로 진행
+
+    # 2. 크롤링 시작
     url = "http://www.38.co.kr/html/fund/?o=k"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -33,6 +51,7 @@ def crawl_ipo_schedule():
     session.mount("http://", LegacyKeyExchangeAdapter())
     session.mount("https://", LegacyKeyExchangeAdapter())
     
+    items = []
     try:
         response = session.get(url, headers=headers, verify=False)
         response.encoding = 'euc-kr'  
@@ -41,41 +60,27 @@ def crawl_ipo_schedule():
             raise Exception(f"페이지 접근 실패 (Status Code: {response.status_code})")
             
         soup = BeautifulSoup(response.text, "html.parser")
-        
-        items = []
-        current_year = datetime.today().year # 2026
-        
-        # ─── [새로운 접근] 태그 조건에 구애받지 않고 텍스트 덩어리에서 정밀 파싱 ───
-        # 아까 데이터가 무더기로 잡혔던 본문 핵심 구역을 가져옵니다.
         page_text = soup.text
-        
-        # 줄바꿈 단위로 쪼갠 뒤 공백을 정리합니다.
         lines = [line.strip() for line in page_text.split('\n') if line.strip()]
         
-        # 기업명 뒤에 날짜(YYYY.MM.DD~MM.DD)가 나오는 패턴을 역추적합니다.
         for i, line in enumerate(lines):
-            # 날짜 형식 패턴 매칭 (예: 2026.07.01~07.02)
             if "~" in line and re.search(r'\d{4}\.\d{2}\.\d{2}', line):
                 try:
-                    # 현재 줄이 날짜라면 바로 앞 줄이 '기업명'일 확률이 높습니다.
                     name = lines[i-1]
                     period_raw = line
                     price_raw = lines[i+1] if i+1 < len(lines) else "-"
                     
-                    # 주간사(증권사)는 보통 그 다음다음 줄 근처에 위치합니다.
                     underwriter = "-"
                     for j in range(i+2, min(i+6, len(lines))):
                         if "증권" in lines[j] or "투자" in lines[j]:
                             underwriter = lines[j]
                             break
                     
-                    # 잡상인 데이터 및 헤더 필터링
                     if "종목명" in name or "기업명" in name or "공모" in name or len(name) > 20:
                         continue
                         
                     name = name.replace("[코스닥상장예정]", "").replace("[코스피상장예정]", "").strip()
                     
-                    # 날짜 표준화 처리
                     start_part, end_part = period_raw.split("~")
                     start_part = start_part.strip()
                     end_part = end_part.strip()
@@ -99,7 +104,7 @@ def crawl_ipo_schedule():
                 except:
                     continue
 
-        # 만약 위 텍스트 기반으로도 실패했을 경우를 대비한 기존 TR 백업 파싱 로직
+        # 백업 파싱 로직
         if not items:
             for row in soup.find_all("tr"):
                 cols = row.find_all("td")
@@ -116,22 +121,65 @@ def crawl_ipo_schedule():
                             "underwriter": cols[-1].text.strip() if "증권" in cols[-1].text else "KB증권"
                         })
 
-        # 최종 상위 5건만 패키징
+        # 최신 상위 5건 데이터 패키징 및 캐시 저장
+        final_items = items[:5]
         ipo_cache_data = {
             "fetched_at": str(datetime.today().date()),  
-            "items": items[:5]  
+            "items": final_items
         }
         
-        cache_filename = "ipo_cache.json"
         with open(cache_filename, "w", encoding="utf-8") as f:
             json.dump(ipo_cache_data, f, ensure_ascii=False, indent=2)
             
-        print(f"✅ 크롤링 성공! 정제된 {len(items[:5])}건의 공모주 데이터를 '{cache_filename}'에 완벽하게 저장했습니다.")
-        return True
+        return final_items
 
     except Exception as e:
-        print(f"❌ 크롤링 실패: {e}")
-        return False
+        print(f"❌ 크롤링 에러 발생 (빈 리스트 반환): {e}")
+        # 에러 발생 시 캐시 파일이라도 있으면 백업용으로 반환
+        if os.path.exists(cache_filename):
+            try:
+                with open(cache_filename, "r", encoding="utf-8") as f:
+                    return json.load(f).get("items", [])
+            except:
+                pass
+        return []
 
+
+# ─── [요구사항 3] 오늘/이번 주 청약 항목 필터링 함수 추가 ───
+
+def ipo_today(items: list[dict], today: str) -> list[dict]:
+    """ 오늘(today: 'YYYY-MM-DD') 청약 진행 중(start <= today <= end)인 기업 필터링 """
+    return [item for item in items if item['start'] <= today <= item['end']]
+
+
+def ipo_week(items: list[dict], today: str) -> list[dict]:
+    """ 오늘(today)을 기준으로 이번 주 일요일까지 청약 일정이 겹치는 기업 필터링 """
+    today_dt = datetime.strptime(today, "%Y-%m-%d")
+    # 이번 주 일요일 계산 (오늘 요일: Monday=0, ..., Sunday=6)
+    days_to_sunday = 6 - today_dt.weekday()
+    sunday_dt = today_dt + timedelta(days=days_to_sunday)
+    sunday = sunday_dt.strftime("%Y-%m-%d")
+    
+    # 내 청약 기간(start~end)이 오늘(today)과 이번 주 일요일(sunday) 사이에 걸쳐있는지 확인
+    return [item for item in items if item['start'] <= sunday and item['end'] >= today]
+
+
+# --- 외부 테스트 및 확인 구문 ---
 if __name__ == "__main__":
-    crawl_ipo_schedule()
+    print("=== 1. fetch_ipo 함수 테스트 ===")
+    ipo_list = fetch_ipo(force_refresh=True) # 테스트를 위해 강제 새로고침
+    print(f"가져온 총 공모주 수: {len(ipo_list)}건")
+    
+    # 명세서 v3 시나리오 검증용 가상 날짜 설정 (2026-06-15 기준 테스트)
+    mock_today = "2026-06-15"
+    print(f"\n📅 테스트 기준 날짜: {mock_today}")
+    
+    print("\n=== 2. ipo_today (오늘 청약 중인 종목) ===")
+    today_items = ipo_today(ipo_list, mock_today)
+    for item in today_items:
+        print(f"[{item['name']}] 기간: {item['start']} ~ {item['end']} | 주간사: {item['underwriter']}")
+        
+    print("\n=== 3. ipo_week (이번 주 진행/예정 종목) ===")
+    week_items = ipo_week(ipo_list, mock_today)
+    for item in week_items:
+        print(f"[{item['name']}] 기간: {item['start']} ~ {item['end']} | 주간사: {item['underwriter']}")
