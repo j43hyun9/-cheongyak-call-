@@ -1,0 +1,154 @@
+#★★★★★★ 최종본 (UI수정중) ★★★★★★
+# env파일 별도 필요
+
+# =========================================================
+# 📌 필요한 라이브러리 설치
+# =========================================================
+# pip install gradio gtts openai python-dotenv
+
+import gradio as gr
+from gtts import gTTS
+from openai import OpenAI
+from dotenv import load_dotenv
+import os
+
+# =========================================================
+# 🔐 OpenAI API KEY 로드
+# =========================================================
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(
+    api_key="sk-proj-"
+)
+
+# =========================================================
+# 🔊 시작 음성 테스트
+# =========================================================
+welcome_text = "안녕하세요, 공모주일정비서 청 약 콜 입니다.음성으로 질문해보세요"
+
+tts = gTTS(text=welcome_text, lang='ko')
+tts.save("welcome.mp3")
+
+# =========================================================
+# 🔊 TTS 함수 / 텍스트 → 음성(mp3)
+# =========================================================
+def speak(text):
+    tts = gTTS(
+        text=text,
+        lang='ko'
+    )
+    output_file = "response.mp3"
+    tts.save(output_file)
+    return output_file
+
+# =========================================================
+# 🎤 Whisper STT 함수 / 음성파일 → 텍스트
+# =========================================================
+def speech_to_text(audio_path):
+    print("OpenAI 서버에서 음성 변환 중...")
+    try:
+        audio_file = open(audio_path, "rb")
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            language="ko"
+        )
+        prompt="""
+                공모주, 청약, 투자일정,
+                일정관리, 비서
+                """
+        return transcript.text
+    except Exception as e:
+        print(f"\n❌ 에러 발생: {e}")
+        return "음성 인식 실패"
+
+# =========================================================
+# 🤖 메인 음성 비서 함수
+# =========================================================
+def ipo_assistant(audio):
+
+    # -----------------------------------------------------
+    # 1. 사용자 음성 → 텍스트(STT)
+    # -----------------------------------------------------
+    recognized_text = speech_to_text(audio)
+    print("📝 인식된 텍스트:", recognized_text)
+
+    # -----------------------------------------------------
+    # 2. 답변 생성
+    # -----------------------------------------------------
+    if "5월" in recognized_text:
+
+        answer = """
+5월 공모주 일정입니다.
+플레드 : 5월 4일 ~ 5월 6일
+마기나락스 : 5월 11일 ~ 5월 12일
+"""
+
+    elif "이번주" in recognized_text:
+
+        answer = """
+이번주 공모주 일정입니다.
+ABC테크 : 5월 27일 청약 시작
+오로라AI : 5월 29일 상장 예정
+"""
+
+    else:
+        answer = f"""
+죄송해요. 질문을 이해하지 못했어요.
+공모주 일정 관련 질문만 답변할 수 있어요.
+"""
+
+    # -----------------------------------------------------
+    # 3. 답변 → 음성(TTS)
+    # -----------------------------------------------------
+    response_audio = speak(answer)
+
+    # -----------------------------------------------------
+    # 4. 결과 반환
+    # -----------------------------------------------------
+    return recognized_text, answer, response_audio
+
+# =========================================================
+# 🎨 Gradio UI
+# =========================================================
+
+iface = gr.Interface(
+    fn=ipo_assistant,
+    inputs=gr.Audio(
+        sources=["microphone"],
+        type="filepath",
+        label="아래 녹음 버튼을 누르고 말씀해주세요."  ),
+
+    outputs=[
+    gr.Textbox(label="📝 인식된 음성"),
+
+    gr.Textbox(label="📅 공모주 일정"),
+
+    gr.Audio(
+        value="welcome.mp3",
+        type="filepath",
+        label="🔊 AI 음성 응답",
+        autoplay=True
+    )
+],
+
+    title="📈 공모주 일정 AI 비서 <청약콜>",
+
+    description="""
+음성으로 공모주 일정을 물어보세요.
+
+예)이번주 공모주 일정 알려줘,
+   내일 오후3시에 팀회의 등록해줘 등
+
+""",
+    submit_btn="🎤 질문하기",
+    clear_btn="🗑 초기화",
+
+    theme="soft"
+)
+
+# =========================================================
+# 🚀 실행
+# =========================================================
+
+iface.launch()
