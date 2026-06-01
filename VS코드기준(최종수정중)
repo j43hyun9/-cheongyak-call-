@@ -351,30 +351,59 @@ if __name__ == "__main__":
 # =========================================================
 def ipo_assistant(audio):
 
-    # -----------------------------------------------------
-    # 1. 사용자 음성 → 텍스트(STT)
-    # -----------------------------------------------------
     recognized_text = transcribe(audio)
+
     print("📝 인식된 텍스트:", recognized_text)
 
-    # -----------------------------------------------------
-    # 2. 답변 생성
-    # -----------------------------------------------------
-    if "5월" in recognized_text:
+    # =========================
+    # 공모주 조회
+    # =========================
+    if "공모주" in recognized_text or "이번주" in recognized_text:
 
-        answer = """
-5월 공모주 일정입니다.
-플레드 : 5월 4일 ~ 5월 6일
-마기나락스 : 5월 11일 ~ 5월 12일
-"""
+        items = fetch_ipo()
 
-    elif "이번주" in recognized_text:
+        if not items:
+            answer = "공모주 일정을 가져오지 못했습니다."
 
-        answer = """
-이번주 공모주 일정입니다.
-ABC테크 : 5월 27일 청약 시작
-오로라AI : 5월 29일 상장 예정
-"""
+        else:
+            answer = "📈 공모주 일정입니다.\n\n"
+
+            for item in items:
+                answer += (
+                    f"기업명 : {item['name']}\n"
+                    f"청약기간 : {item['start']} ~ {item['end']}\n"
+                    f"주간사 : {item['underwriter']}\n\n"
+                )
+
+    # =========================
+    # 일정 등록
+    # =========================
+    elif "회의 등록" in recognized_text:
+
+        save_schedule(
+            "팀회의",
+            datetime(2026, 6, 2, 15, 0)
+        )
+
+        answer = "팀회의 일정이 등록되었습니다."
+
+    # =========================
+    # 일정 조회
+    # =========================
+    elif "일정 뭐야" in recognized_text:
+
+        schedules = load_schedule(
+            datetime(2026, 6, 2)
+        )
+        if not schedules:
+            answer = "등록된 일정이 없습니다."
+
+        else:
+            answer = "📅 등록된 일정입니다.\n\n"
+            for s in schedules:
+                answer += (
+                    f"{s['title']}\n"
+                )
 
     else:
         answer = f"""
