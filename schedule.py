@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime
 
-SCHEDULE_FILE = "schedules.json"
+SCHEDULE_FILE = "schedule.json"
 
 
 def _load_all() -> list:
@@ -35,10 +35,8 @@ def load_schedule(target_date: datetime) -> list:
 
 
 if __name__ == "__main__":
-    from datetime import datetime
-
-    save_schedule("청약 신청 마감", datetime(2026, 6, 5, 18, 0))
-    save_schedule("서류 제출", datetime(2026, 6, 5, 9, 0))
+    save_schedule("팀 회의", datetime(2026, 6, 5, 18, 0))
+    save_schedule("조깅", datetime(2026, 6, 5, 9, 0))
 
     results = load_schedule(datetime(2026, 6, 5))
     for r in results:

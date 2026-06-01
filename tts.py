@@ -1,15 +1,12 @@
 from gtts import gTTS
-import playsound
-import os
 
 
-def speak(text):
+def synthesize(text: str, out_path: str = "response.mp3") -> str:
     tts = gTTS(text=text, lang='ko')
-    tts.save("response.mp3")
-    playsound.playsound("response.mp3")
-    os.remove("response.mp3")
+    tts.save(out_path)
+    return out_path
 
 
 if __name__ == "__main__":
-    speak("안녕하세요, AI 투자 일정 비서입니다.")
-    speak("공모주 청약 일정을 알려드리겠습니다.")
+    path = synthesize("안녕하세요, AI 도우미입니다.")
+    print(f"저장됨: {path}")
