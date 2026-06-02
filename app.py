@@ -43,8 +43,8 @@ def view_schedule_handler(date_str: str):
 
 # --- UI ---
 
-with gr.Blocks(title="AI 도우미") as demo:
-    gr.Markdown("# AI 도우미")
+with gr.Blocks(title="청약콜") as demo:
+    gr.Markdown("# 청약콜")
 
     with gr.Tab("TTS"):
         gr.Markdown("### 텍스트 → 음성 변환")
