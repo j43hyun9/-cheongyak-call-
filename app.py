@@ -71,4 +71,4 @@ with gr.Blocks(title="청약콜") as demo:
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(share=True)
