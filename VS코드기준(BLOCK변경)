@@ -4,13 +4,35 @@
 # =========================================================
 # 📌 필요한 라이브러리 설치
 # =========================================================
-# pip install gradio gtts openai python-dotenv
+# pip install gradio gtts openai python-dotenv requests beautifulsoup4 urllib3
 
 import gradio as gr
 from gtts import gTTS
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+
+
+# 김준서
+
+from datetime import datetime
+from tts import synthesize
+from schedule import save_schedule, load_schedule
+import json
+
+# 장두호
+import re
+from datetime import datetime, timedelta
+
+#임강
+import requests
+from bs4 import BeautifulSoup
+import urllib3
+from urllib3.poolmanager import PoolManager 
+import ssl
+from requests.adapters import HTTPAdapter
+
+
 
 # =========================================================
 # 🔐 OpenAI API KEY 로드
@@ -34,6 +56,75 @@ tts2 = gTTS(text=welcome_text2, lang='ko')
 tts2.save("welcome_again.mp3")
 
 # =========================================================
+# app / 김준서
+# =========================================================
+
+# --- TTS ---
+
+def tts_handler(text: str):
+    if not text.strip():
+        return None
+    path = synthesize(text)
+    return path
+
+
+# --- 일정 저장 ---
+
+def add_schedule_handler(title: str, date_str: str, time_str: str):
+    if not title.strip() or not date_str or not time_str:
+        return "제목, 날짜, 시간을 모두 입력해 주세요."
+    try:
+        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        return "날짜/시간 형식을 확인해 주세요. (날짜: YYYY-MM-DD, 시간: HH:MM)"
+    entry = save_schedule(title, dt)
+    return f"저장됨: {entry['title']} @ {entry['datetime']}"
+
+
+# --- 일정 조회 ---
+
+def view_schedule_handler(date_str: str):
+    if not date_str:
+        return "날짜를 입력해 주세요."
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return "날짜 형식을 확인해 주세요. (YYYY-MM-DD)"
+    items = load_schedule(dt)
+    if not items:
+        return "해당 날짜에 일정이 없습니다."
+    return "\n".join(f"- {i['title']}  ({i['datetime'][11:16]})" for i in items)
+
+
+# --- UI ---
+
+with gr.Blocks(title="AI 도우미") as demo:
+    gr.Markdown("# AI 도우미")
+
+    with gr.Tab("TTS"):
+        gr.Markdown("### 텍스트 → 음성 변환")
+        tts_input = gr.Textbox(label="텍스트 입력", placeholder="읽어줄 내용을 입력하세요")
+        tts_btn = gr.Button("변환")
+        tts_audio = gr.Audio(label="음성 출력", type="filepath")
+        tts_btn.click(fn=tts_handler, inputs=tts_input, outputs=tts_audio)
+
+    with gr.Tab("일정 관리"):
+        gr.Markdown("### 일정 추가")
+        with gr.Row():
+            sch_title = gr.Textbox(label="제목")
+            sch_date = gr.Textbox(label="날짜 (YYYY-MM-DD)", placeholder="2026-06-05")
+            sch_time = gr.Textbox(label="시간 (HH:MM)", placeholder="09:00")
+        add_btn = gr.Button("저장")
+        add_result = gr.Textbox(label="결과", interactive=False)
+        add_btn.click(fn=add_schedule_handler, inputs=[sch_title, sch_date, sch_time], outputs=add_result)
+
+        gr.Markdown("### 일정 조회")
+        view_date = gr.Textbox(label="날짜 (YYYY-MM-DD)", placeholder="2026-06-05")
+        view_btn = gr.Button("조회")
+        view_result = gr.Textbox(label="결과", interactive=False, lines=5)
+        view_btn.click(fn=view_schedule_handler, inputs=view_date, outputs=view_result)
+
+# =========================================================
 # 🔊 TTS 함수 / 김준서
 # =========================================================
 def speak(text):
@@ -48,13 +139,10 @@ if __name__ == "__main__":
     speak("공모주 청약 일정을 알려드리겠습니다.")
 
 # =========================================================
-# ✅ schedule.py 추가
+# ✅ schedule.py 김준서
 # =========================================================
-import json
-import os
-from datetime import datetime
 
-SCHEDULE_FILE = "schedules.json"
+SCHEDULE_FILE = "schedule.json"
 
 
 def _load_all() -> list:
@@ -87,10 +175,8 @@ def load_schedule(target_date: datetime) -> list:
 
 
 if __name__ == "__main__":
-    from datetime import datetime
-
-    save_schedule("청약 신청 마감", datetime(2026, 6, 5, 18, 0))
-    save_schedule("서류 제출", datetime(2026, 6, 5, 9, 0))
+    save_schedule("팀 회의", datetime(2026, 6, 5, 18, 0))
+    save_schedule("조깅", datetime(2026, 6, 5, 9, 0))
 
     results = load_schedule(datetime(2026, 6, 5))
     for r in results:
@@ -101,15 +187,8 @@ if __name__ == "__main__":
 # =========================================================
 
 # =========================================================
-# ✅ intent.py 추가예정
+# ✅ intent 장두호
 # =========================================================
-
-# ==================================================
-# intent.py (고급 버전 - One Cell)
-# ==================================================
-
-import re
-from datetime import datetime, timedelta
 
 # ==================================================
 # Intent 상수
@@ -486,17 +565,8 @@ if __name__ == "__main__":
         print(f"ℹ️ 테스트할 [{test_file}] 파일이 로컬에 없습니다. 파일명을 확인해 주세요.")
 
 # =========================================================
-# ✅ crawler.py
+# ✅ crawler.py 임강
 # =========================================================
-
-from datetime import datetime, timedelta
-import requests
-from bs4 import BeautifulSoup
-import urllib3
-from urllib3.poolmanager import PoolManager 
-import ssl
-from requests.adapters import HTTPAdapter
-import re
 
 # 경고 메시지 무시 설정
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -673,7 +743,7 @@ if __name__ == "__main__":
     for item in week_items:
         print(f"[{item['name']}] 기간: {item['start']} ~ {item['end']} | 주간사: {item['underwriter']}")
 # =========================================================
-# 🤖 메인 음성 비서 함수
+# 🤖 메인 음성 비서 함수 / 백승옥
 # =========================================================
 def ipo_assistant(audio):
 
@@ -794,7 +864,7 @@ def ipo_assistant(audio):
             None
         )
 # =========================================================
-# 🔄 초기화 함수
+# 🔄 초기화 함수 / 백승옥
 # =========================================================
 def reset_ui(count):
 
@@ -805,10 +875,16 @@ def reset_ui(count):
     else:
         audio_file = "welcome_again.mp3"
 
-    return "", "", audio_file, count
+    return (
+        None,   # 🎤 녹음 초기화
+        "",     # STT 박스 초기화
+        "",     # 답변 초기화
+        audio_file,
+        count
+    )
 
 # =========================================================
-# 🎨 CSS
+# 🎨 CSS / 백승옥
 # =========================================================
 custom_css = """
 .gradio-container {
@@ -850,7 +926,7 @@ textarea {
 """
 
 # =========================================================
-# 🎨 Gradio UI
+# 🎨 Gradio UI / 백승옥
 # =========================================================
 with gr.Blocks(theme="soft", css=custom_css) as demo:
 
@@ -926,7 +1002,7 @@ with gr.Blocks(theme="soft", css=custom_css) as demo:
     reset_btn.click(
         fn=reset_ui,
         inputs=[reset_count],
-        outputs=[stt_box, answer_box, audio_output, reset_count]
+        outputs=[audio_input, stt_box, answer_box, audio_output, reset_count]
     )
 # =========================================================
 # 🚀 실행
