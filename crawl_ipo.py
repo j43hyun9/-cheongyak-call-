@@ -23,25 +23,36 @@ class LegacyKeyExchangeAdapter(HTTPAdapter):
             num_pools=connections, maxsize=maxsize, block=block, ssl_context=ctx, **pool_kwargs
         )
 
-# ─── [요구사항 2] 함수 변경 및 list[dict] 반환 구조 ───
+# ─── [개선 반영] fetch_ipo 내에 캐시 만료(TTL 24h) 검증 로직 추가 ───
 def fetch_ipo(force_refresh=False) -> list[dict]:
     """
     38커뮤니케이션에서 공모주 일정을 가져옵니다.
-    force_refresh=False 이면 기존 캐시 파일(ipo_cache.json)이 있을 때 파일에서 읽어오고,
-    True 이면 무조건 새로 크롤링합니다.
+    - force_refresh=False 이면 기존 캐시 파일의 fetched_at을 확인하여 당일 데이터인 경우 캐시를 반환합니다.
+    - 캐시가 만료(24시간 경과)되었거나 True 이면 무조건 새로 크롤링합니다.
     """
     cache_filename = "ipo_cache.json"
+    today_str = str(datetime.today().date()) # 오늘 날짜 (YYYY-MM-DD)
     
-    # 1. 강제 갱신이 아니고 캐시 파일이 존재하면 기존 데이터 반환 (서버 부하 및 차단 방지)
+    # 1. 캐시 파일이 존재하고 강제 갱신 요청이 아닐 때 만료 여부(TTL) 체크
     if not force_refresh and os.path.exists(cache_filename):
         try:
             with open(cache_filename, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("items", [])
-        except:
-            pass # 파일 읽기 실패 시 아래 크롤링 로직으로 진행
+                cached_data = json.load(f)
+                
+            fetched_at = cached_data.get("fetched_at", "")
+            
+            # 수집된 날짜(fetched_at)가 오늘 날짜와 같다면 캐시 데이터 유효 (24h 이내)
+            if fetched_at == today_str:
+                print(f"🔄 [캐시 사용] 당일 수집된 캐시가 유효합니다. (fetched_at: {fetched_at})")
+                return cached_data.get("items", [])
+            else:
+                print(f"⏳ [캐시 만료] 캐시 날짜({fetched_at})가 오늘({today_str})과 달라 재크롤링을 진행합니다.")
+        except Exception as e:
+            print(f"⚠️ 캐시 파일을 읽는 중 오류가 발생하여 재크롤링합니다: {e}")
+            pass
 
-    # 2. 크롤링 시작
+    # 2. 크롤링 시작 (캐시가 없거나, 만료되었거나, force_refresh=True 인 경우)
+    print("🌐 [네트워크 요청] 38커뮤니케이션 실시간 데이터 긁어오는 중...")
     url = "http://www.38.co.kr/html/fund/?o=k"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -124,28 +135,30 @@ def fetch_ipo(force_refresh=False) -> list[dict]:
         # 최신 상위 5건 데이터 패키징 및 캐시 저장
         final_items = items[:5]
         ipo_cache_data = {
-            "fetched_at": str(datetime.today().date()),  
+            "fetched_at": today_str,  # 오늘 날짜로 갱신 기록
             "items": final_items
         }
         
         with open(cache_filename, "w", encoding="utf-8") as f:
             json.dump(ipo_cache_data, f, ensure_ascii=False, indent=2)
             
+        print("💾 [캐시 업데이트] 새로운 공모주 데이터를 캐시 파일에 저장했습니다.")
         return final_items
 
     except Exception as e:
-        print(f"❌ 크롤링 에러 발생 (빈 리스트 반환): {e}")
-        # 에러 발생 시 캐시 파일이라도 있으면 백업용으로 반환
+        print(f"❌ 크롤링 에러 발생 (백업 캐시 점검): {e}")
+        # 크롤링 실패 시 만료 여부 불문하고 물리적인 캐시 파일이라도 있으면 최종 보루로 리턴
         if os.path.exists(cache_filename):
             try:
                 with open(cache_filename, "r", encoding="utf-8") as f:
+                    print("⚠️ 네트워크 에러로 인해 만료된 과거 캐시 데이터를 반환합니다.")
                     return json.load(f).get("items", [])
             except:
                 pass
         return []
 
 
-# ─── [요구사항 3] 오늘/이번 주 청약 항목 필터링 함수 추가 ───
+# ─── 오늘/이번 주 청약 항목 필터링 함수 ───
 
 def ipo_today(items: list[dict], today: str) -> list[dict]:
     """ 오늘(today: 'YYYY-MM-DD') 청약 진행 중(start <= today <= end)인 기업 필터링 """
@@ -155,31 +168,21 @@ def ipo_today(items: list[dict], today: str) -> list[dict]:
 def ipo_week(items: list[dict], today: str) -> list[dict]:
     """ 오늘(today)을 기준으로 이번 주 일요일까지 청약 일정이 겹치는 기업 필터링 """
     today_dt = datetime.strptime(today, "%Y-%m-%d")
-    # 이번 주 일요일 계산 (오늘 요일: Monday=0, ..., Sunday=6)
     days_to_sunday = 6 - today_dt.weekday()
     sunday_dt = today_dt + timedelta(days=days_to_sunday)
     sunday = sunday_dt.strftime("%Y-%m-%d")
     
-    # 내 청약 기간(start~end)이 오늘(today)과 이번 주 일요일(sunday) 사이에 걸쳐있는지 확인
     return [item for item in items if item['start'] <= sunday and item['end'] >= today]
 
 
 # --- 외부 테스트 및 확인 구문 ---
 if __name__ == "__main__":
-    print("=== 1. fetch_ipo 함수 테스트 ===")
-    ipo_list = fetch_ipo(force_refresh=True) # 테스트를 위해 강제 새로고침
-    print(f"가져온 총 공모주 수: {len(ipo_list)}건")
+    print("=== [테스트 1] 캐시 제어 및 TTL 검증 ===")
+    # 첫 호출 (만약 오늘 이미 생성된 json이 있다면 캐시를 읽고, 없거나 어제 날짜면 크롤링을 합니다)
+    ipo_list = fetch_ipo(force_refresh=False)
+    print(f"결과 데이터 수: {len(ipo_list)}건\n")
     
-    # 명세서 v3 시나리오 검증용 가상 날짜 설정 (2026-06-15 기준 테스트)
-    mock_today = "2026-06-15"
-    print(f"\n📅 테스트 기준 날짜: {mock_today}")
-    
-    print("\n=== 2. ipo_today (오늘 청약 중인 종목) ===")
-    today_items = ipo_today(ipo_list, mock_today)
-    for item in today_items:
-        print(f"[{item['name']}] 기간: {item['start']} ~ {item['end']} | 주간사: {item['underwriter']}")
-        
-    print("\n=== 3. ipo_week (이번 주 진행/예정 종목) ===")
-    week_items = ipo_week(ipo_list, mock_today)
-    for item in week_items:
-        print(f"[{item['name']}] 기간: {item['start']} ~ {item['end']} | 주간사: {item['underwriter']}")
+    print("=== [테스트 2] 의도적 강제 새로고침 ===")
+    # 기획자 테스트용 파라미터 작동 검증
+    ipo_list_forced = fetch_ipo(force_refresh=True)
+    print(f"결과 데이터 수: {len(ipo_list_forced)}건")
