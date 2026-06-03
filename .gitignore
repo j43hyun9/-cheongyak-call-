@@ -1,0 +1,15 @@
+# 환경변수 / 시크릿
+.env
+
+# 파이썬 캐시
+__pycache__/
+*.pyc
+
+# Gradio 캐시
+.gradio/
+
+# 런타임 생성물 (음성·캐시·일정 데이터)
+*.mp3
+ipo_cache.json
+schedule.json
+schedules.json

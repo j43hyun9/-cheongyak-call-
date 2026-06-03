@@ -16,8 +16,6 @@ import os
 # 김준서
 
 from datetime import datetime
-from tts import synthesize
-from schedule import save_schedule, load_schedule
 import json
 
 # 장두호
@@ -56,75 +54,6 @@ tts2 = gTTS(text=welcome_text2, lang='ko')
 tts2.save("welcome_again.mp3")
 
 # =========================================================
-# app / 김준서
-# =========================================================
-
-# --- TTS ---
-
-def tts_handler(text: str):
-    if not text.strip():
-        return None
-    path = synthesize(text)
-    return path
-
-
-# --- 일정 저장 ---
-
-def add_schedule_handler(title: str, date_str: str, time_str: str):
-    if not title.strip() or not date_str or not time_str:
-        return "제목, 날짜, 시간을 모두 입력해 주세요."
-    try:
-        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-    except ValueError:
-        return "날짜/시간 형식을 확인해 주세요. (날짜: YYYY-MM-DD, 시간: HH:MM)"
-    entry = save_schedule(title, dt)
-    return f"저장됨: {entry['title']} @ {entry['datetime']}"
-
-
-# --- 일정 조회 ---
-
-def view_schedule_handler(date_str: str):
-    if not date_str:
-        return "날짜를 입력해 주세요."
-    try:
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
-    except ValueError:
-        return "날짜 형식을 확인해 주세요. (YYYY-MM-DD)"
-    items = load_schedule(dt)
-    if not items:
-        return "해당 날짜에 일정이 없습니다."
-    return "\n".join(f"- {i['title']}  ({i['datetime'][11:16]})" for i in items)
-
-
-# --- UI ---
-
-with gr.Blocks(title="AI 도우미") as demo:
-    gr.Markdown("# AI 도우미")
-
-    with gr.Tab("TTS"):
-        gr.Markdown("### 텍스트 → 음성 변환")
-        tts_input = gr.Textbox(label="텍스트 입력", placeholder="읽어줄 내용을 입력하세요")
-        tts_btn = gr.Button("변환")
-        tts_audio = gr.Audio(label="음성 출력", type="filepath")
-        tts_btn.click(fn=tts_handler, inputs=tts_input, outputs=tts_audio)
-
-    with gr.Tab("일정 관리"):
-        gr.Markdown("### 일정 추가")
-        with gr.Row():
-            sch_title = gr.Textbox(label="제목")
-            sch_date = gr.Textbox(label="날짜 (YYYY-MM-DD)", placeholder="2026-06-05")
-            sch_time = gr.Textbox(label="시간 (HH:MM)", placeholder="09:00")
-        add_btn = gr.Button("저장")
-        add_result = gr.Textbox(label="결과", interactive=False)
-        add_btn.click(fn=add_schedule_handler, inputs=[sch_title, sch_date, sch_time], outputs=add_result)
-
-        gr.Markdown("### 일정 조회")
-        view_date = gr.Textbox(label="날짜 (YYYY-MM-DD)", placeholder="2026-06-05")
-        view_btn = gr.Button("조회")
-        view_result = gr.Textbox(label="결과", interactive=False, lines=5)
-        view_btn.click(fn=view_schedule_handler, inputs=view_date, outputs=view_result)
-
-# =========================================================
 # 🔊 TTS 함수 / 김준서
 # =========================================================
 def speak(text):
@@ -132,11 +61,6 @@ def speak(text):
     output_file = "response.mp3"
     tts.save(output_file)
     return output_file
-
-
-if __name__ == "__main__":
-    speak("안녕하세요, AI 투자 일정 비서입니다.")
-    speak("공모주 청약 일정을 알려드리겠습니다.")
 
 # =========================================================
 # ✅ schedule.py 김준서
@@ -172,15 +96,6 @@ def load_schedule(target_date: datetime) -> list:
         item for item in data
         if item["datetime"].startswith(target_str)
     ]
-
-
-if __name__ == "__main__":
-    save_schedule("팀 회의", datetime(2026, 6, 5, 18, 0))
-    save_schedule("조깅", datetime(2026, 6, 5, 9, 0))
-
-    results = load_schedule(datetime(2026, 6, 5))
-    for r in results:
-        print(r)
 
 # =========================================================
 # ☑️ LL M 로직 / 장두호
@@ -460,54 +375,6 @@ def parse_schedule_args(text, now=None):
     }
 
 
-# ==================================================
-# 테스트
-# ==================================================
-
-if __name__ == "__main__":
-
-    now = datetime(
-        2026,
-        6,
-        1,
-        10,
-        0
-    )
-
-    samples = [
-
-        "공모주 일정 알려줘",
-
-        "내일 오후 3시 팀회의 등록",
-
-        "모레 오전 10시 프로젝트 미팅 추가",
-
-        "다음주 일정 조회",
-
-        "6월 10일 오전 9시 캡스톤 디자인 발표 등록"
-    ]
-
-    for text in samples:
-
-        print("=" * 60)
-
-        print("입력:", text)
-
-        intent = classify_intent(text)
-
-        print("Intent:", intent)
-
-        result = parse_schedule_args(
-            text,
-            now
-        )
-
-        print("결과:")
-
-        print(result)
-
-        print()
-
 # =========================================================
 # 🎤 Whisper STT 함수 / 임강
 # =========================================================
@@ -550,19 +417,6 @@ def transcribe(audio_path) -> str:
     """
     return convert_speech_to_text_whisper(audio_path)
 
-
-# --- 단독 실행 및 테스트 구문 ---
-if __name__ == "__main__":
-    # 테스트할 파일명을 적어주세요 (Gradio 결합 시에는 이 구문이 실행되지 않습니다)
-    test_file = "test1.wav" 
-    
-    print("=== OpenAI Whisper STT 단독 테스트 (transcribe 호출) ===")
-    if os.path.exists(test_file):
-        print(f"🔄 [{test_file}] 파일 변환 중...")
-        result = transcribe(test_file)
-        print(f"👉 결과: \"{result}\"")
-    else:
-        print(f"ℹ️ 테스트할 [{test_file}] 파일이 로컬에 없습니다. 파일명을 확인해 주세요.")
 
 # =========================================================
 # ✅ crawler.py 임강
@@ -734,18 +588,6 @@ def ipo_week(items: list[dict], today: str) -> list[dict]:
     return [item for item in items if item['start'] <= sunday and item['end'] >= today]
 
 
-# --- 외부 테스트 및 확인 구문 ---
-if __name__ == "__main__":
-    print("=== [테스트 1] 캐시 제어 및 TTL 검증 ===")
-    # 첫 호출 (만약 오늘 이미 생성된 json이 있다면 캐시를 읽고, 없거나 어제 날짜면 크롤링을 합니다)
-    ipo_list = fetch_ipo(force_refresh=False)
-    print(f"결과 데이터 수: {len(ipo_list)}건\n")
-    
-    print("=== [테스트 2] 의도적 강제 새로고침 ===")
-    # 기획자 테스트용 파라미터 작동 검증
-    ipo_list_forced = fetch_ipo(force_refresh=True)
-    print(f"결과 데이터 수: {len(ipo_list_forced)}건")
-    
 # =========================================================
 # 🤖 메인 음성 비서 함수 / 백승옥
 # =========================================================
@@ -897,6 +739,33 @@ def reset_ui(count):
     )
 
 # =========================================================
+# 📅 일정관리 탭 핸들러 (수동 입력) / 통합
+# =========================================================
+def add_schedule_handler(title, date_str, time_str):
+    if not title.strip() or not date_str or not time_str:
+        return "제목, 날짜, 시간을 모두 입력해 주세요."
+    try:
+        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        return "날짜/시간 형식을 확인해 주세요. (날짜: YYYY-MM-DD, 시간: HH:MM)"
+    entry = save_schedule(title, dt)
+    return f"저장됨: {entry['title']} @ {entry['datetime']}"
+
+
+def view_schedule_handler(date_str):
+    if not date_str:
+        return "날짜를 입력해 주세요."
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return "날짜 형식을 확인해 주세요. (YYYY-MM-DD)"
+    items = load_schedule(dt)
+    if not items:
+        return "해당 날짜에 일정이 없습니다."
+    return "\n".join(f"- {i['title']}  ({i['datetime'][11:16]})" for i in items)
+
+
+# =========================================================
 # 🎨 CSS / 백승옥
 # =========================================================
 custom_css = """
@@ -946,77 +815,69 @@ with gr.Blocks(theme="soft", css=custom_css) as demo:
     # 상태값
     reset_count = gr.State(0)
 
-    # =========================
-    # 제목
-    # =========================
-    gr.Markdown("""
-# 📈 공모주 일정 AI 비서 <청약콜>
-""")
+    gr.Markdown("# 📈 공모주 일정 AI 비서 <청약콜>")
 
     # =========================
-    # 안내 영역
+    # 탭 1: 음성비서 (마이크 PTT)
     # =========================
-    with gr.Column(elem_classes="center-box"):
-        gr.Markdown(""" """)
+    with gr.Tab("🎤 음성비서"):
+
+        audio_input = gr.Audio(
+            sources=["microphone"],
+            type="filepath",
+            label="🎤 음성으로 질문하세요"
+        )
+
+        with gr.Row(elem_classes="left-buttons"):
+            ask_btn = gr.Button("🎤 질문하기")
+            reset_btn = gr.Button("👉 시작하기")
+
+        gr.Markdown("💡 예시 : \"이번주 공모주 알려줘\" / \"내일 오후 3시 팀회의 등록해줘\"")
+
+        stt_box = gr.Textbox(label="📝 인식된 음성", lines=2)
+        answer_box = gr.Textbox(label="📅 AI 답변", lines=8)
+        audio_output = gr.Audio(label="🔊 AI 음성 응답", autoplay=True)
+
+        ask_btn.click(
+            fn=ipo_assistant,
+            inputs=audio_input,
+            outputs=[stt_box, answer_box, audio_output]
+        )
+        reset_btn.click(
+            fn=reset_ui,
+            inputs=[reset_count],
+            outputs=[audio_input, stt_box, answer_box, audio_output, reset_count]
+        )
 
     # =========================
-    # 입력 영역
+    # 탭 2: 일정관리 (수동 입력 — 음성비서와 동일한 schedule.json 공유)
     # =========================
-    audio_input = gr.Audio(
-        sources=["microphone"],
-        type="filepath",
-        label="🎤 음성으로 질문하세요"
-    )
+    with gr.Tab("📅 일정관리"):
 
-    # =========================
-    # 버튼 영역
-    # =========================
-    with gr.Row(elem_classes="left-buttons"):
-        ask_btn = gr.Button("🎤 질문하기")
-        reset_btn = gr.Button("👉시작하기")
-    
+        gr.Markdown("### ➕ 일정 추가")
+        with gr.Row():
+            sch_title = gr.Textbox(label="제목", placeholder="팀 회의")
+            sch_date = gr.Textbox(label="날짜 (YYYY-MM-DD)", placeholder="2026-06-05")
+            sch_time = gr.Textbox(label="시간 (HH:MM)", placeholder="15:00")
+        add_btn = gr.Button("저장")
+        add_result = gr.Textbox(label="결과", interactive=False)
+        add_btn.click(
+            fn=add_schedule_handler,
+            inputs=[sch_title, sch_date, sch_time],
+            outputs=add_result
+        )
 
-    # =========================
-    # 설명
-    # =========================
-    gr.Markdown("""
-💡 예시  
-- "이번주 공모주 알려줘"  
-- "내일 오후 3시 팀회의 등록해줘"
-""")
+        gr.Markdown("### 🔍 일정 조회")
+        view_date = gr.Textbox(label="날짜 (YYYY-MM-DD)", placeholder="2026-06-05")
+        view_btn = gr.Button("조회")
+        view_result = gr.Textbox(label="결과", interactive=False, lines=5)
+        view_btn.click(
+            fn=view_schedule_handler,
+            inputs=view_date,
+            outputs=view_result
+        )
 
-    # =========================
-    # 출력 영역
-    # =========================
-    stt_box = gr.Textbox(
-        label="📝 인식된 음성",
-        lines=2
-    )
 
-    answer_box = gr.Textbox(
-        label="📅 AI 답변",
-        lines=8
-    )
-
-    audio_output = gr.Audio(
-        label="🔊 AI 음성 응답",
-        autoplay=True
-    )
-
-    # =========================
-    # 이벤트 연결
-    # =========================
-    ask_btn.click(
-        fn=ipo_assistant,
-        inputs=audio_input,
-        outputs=[stt_box, answer_box, audio_output]
-    )
-
-    reset_btn.click(
-        fn=reset_ui,
-        inputs=[reset_count],
-        outputs=[audio_input, stt_box, answer_box, audio_output, reset_count]
-    )
 # =========================================================
 # 🚀 실행
 # =========================================================
