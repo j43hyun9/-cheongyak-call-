@@ -96,34 +96,6 @@ def view_schedule_handler(date_str: str):
     return "\n".join(f"- {i['title']}  ({i['datetime'][11:16]})" for i in items)
 
 
-# --- UI ---
-
-with gr.Blocks(title="AI 도우미") as demo:
-    gr.Markdown("# AI 도우미")
-
-    with gr.Tab("TTS"):
-        gr.Markdown("### 텍스트 → 음성 변환")
-        tts_input = gr.Textbox(label="텍스트 입력", placeholder="읽어줄 내용을 입력하세요")
-        tts_btn = gr.Button("변환")
-        tts_audio = gr.Audio(label="음성 출력", type="filepath")
-        tts_btn.click(fn=tts_handler, inputs=tts_input, outputs=tts_audio)
-
-    with gr.Tab("일정 관리"):
-        gr.Markdown("### 일정 추가")
-        with gr.Row():
-            sch_title = gr.Textbox(label="제목")
-            sch_date = gr.Textbox(label="날짜 (YYYY-MM-DD)", placeholder="2026-06-05")
-            sch_time = gr.Textbox(label="시간 (HH:MM)", placeholder="09:00")
-        add_btn = gr.Button("저장")
-        add_result = gr.Textbox(label="결과", interactive=False)
-        add_btn.click(fn=add_schedule_handler, inputs=[sch_title, sch_date, sch_time], outputs=add_result)
-
-        gr.Markdown("### 일정 조회")
-        view_date = gr.Textbox(label="날짜 (YYYY-MM-DD)", placeholder="2026-06-05")
-        view_btn = gr.Button("조회")
-        view_result = gr.Textbox(label="결과", interactive=False, lines=5)
-        view_btn.click(fn=view_schedule_handler, inputs=view_date, outputs=view_result)
-
 # =========================================================
 # 🔊 TTS 함수 / 김준서
 # =========================================================
@@ -749,6 +721,91 @@ if __name__ == "__main__":
 # =========================================================
 # 🤖 메인 음성 비서 함수 / 백승옥
 # =========================================================
+def process_text_command(recognized_text):
+
+    intent_result = classify_intent(recognized_text)
+    intent = intent_result["intent"]
+
+    if intent == INTENT_IPO:
+        items = fetch_ipo()
+
+        if not items:
+            answer = "공모주 일정을 가져오지 못했습니다."
+        else:
+            answer = "📈 공모주 일정입니다.\n\n"
+
+            for item in items:
+                answer += (
+                    f"기업명 : {item['name']}\n"
+                    f"청약기간 : {item['start']} ~ {item['end']}\n"
+                    f"주간사 : {item['underwriter']}\n\n"
+                )
+
+    elif intent == INTENT_ADD:
+        result = parse_schedule_args(recognized_text)
+
+        entry = save_schedule(
+            result["title"],
+            result["datetime"]
+        )
+
+        answer = (
+            f"{entry['title']} 일정이 등록되었습니다.\n"
+            f"{entry['datetime']}"
+        )
+
+    elif intent == INTENT_VIEW:
+        target_date = parse_kr_datetime(recognized_text)
+        schedules = load_schedule(target_date)
+
+        if not schedules:
+            answer = "등록된 일정이 없습니다."
+        else:
+            answer = "등록된 일정입니다.\n\n"
+
+            for s in schedules:
+                dt = datetime.fromisoformat(s["datetime"])
+                answer += f"- {dt.strftime('%H:%M')} {s['title']}\n"
+
+    else:
+        answer = "죄송해요. 공모주 일정 조회 또는 일정 등록만 가능합니다."
+
+    return answer
+
+def unified_assistant(audio, text):
+
+    try:
+        # 1) 텍스트 입력이 있으면 텍스트 우선 사용
+        if text and text.strip():
+            recognized_text = text.strip()
+
+        # 2) 텍스트가 없고 음성이 있으면 STT 사용
+        elif audio is not None:
+            if not os.getenv("OPENAI_API_KEY"):
+                msg = "OPENAI_API_KEY 설정을 확인해 주세요."
+                return "", msg, speak(msg)
+
+            recognized_text = transcribe(audio)
+
+            if not recognized_text:
+                msg = "음성을 인식하지 못했습니다. 다시 말씀해 주세요."
+                return "", msg, speak(msg)
+
+        # 3) 둘 다 없으면 안내
+        else:
+            msg = "음성으로 질문하거나 텍스트를 입력해 주세요."
+            return "", msg, speak(msg)
+
+        # 4) 기존 AI 처리 로직 사용
+        answer = process_text_command(recognized_text)
+        response_audio = speak(answer)
+
+        return recognized_text, answer, response_audio
+
+    except Exception as e:
+        print("❌ unified_assistant 오류:", e)
+        return "", f"오류가 발생했습니다. ({str(e)})", None
+    
 def ipo_assistant(audio):
 
     try:
@@ -889,9 +946,10 @@ def reset_ui(count):
         audio_file = "welcome_again.mp3"
 
     return (
-        None,   # 🎤 녹음 초기화
-        "",     # STT 박스 초기화
-        "",     # 답변 초기화
+        None,
+        "",
+        "",
+        "",
         audio_file,
         count
     )
@@ -968,13 +1026,18 @@ with gr.Blocks(theme="soft", css=custom_css) as demo:
         label="🎤 음성으로 질문하세요"
     )
 
+    text_input = gr.Textbox(
+        label="⌨️ 텍스트로 질문하세요",
+        placeholder="예: 이번주 공모주 알려줘 / 내일 오후 3시 팀회의 등록해줘",
+        lines=2
+    )
+
     # =========================
     # 버튼 영역
     # =========================
     with gr.Row(elem_classes="left-buttons"):
         ask_btn = gr.Button("🎤 질문하기")
-        reset_btn = gr.Button("👉시작하기")
-    
+        reset_btn = gr.Button("👉시작하기")  
 
     # =========================
     # 설명
@@ -1003,19 +1066,43 @@ with gr.Blocks(theme="soft", css=custom_css) as demo:
         autoplay=True
     )
 
+    gr.Markdown("# 📅 등록된 일정 확인")
+
+    with gr.Tab("일정 조회"):
+        gr.Markdown("### 📆 날짜별 일정 조회")
+
+        view_date = gr.Textbox(
+            label="📅 조회할 날짜",
+            placeholder="예: 2026-06-05"
+        )
+
+        view_btn = gr.Button("📆 일정 조회")
+        
+        view_result = gr.Textbox(
+            label="📋 조회 결과",
+            interactive=False,
+            lines=7,
+            placeholder="조회한 날짜의 일정이 시간순으로 표시됩니다."
+        )
+
+        view_btn.click(
+            fn=view_schedule_handler,
+            inputs=view_date,
+            outputs=view_result
+        )
     # =========================
     # 이벤트 연결
     # =========================
     ask_btn.click(
-        fn=ipo_assistant,
-        inputs=audio_input,
+        fn=unified_assistant,
+        inputs=[audio_input, text_input],
         outputs=[stt_box, answer_box, audio_output]
     )
 
     reset_btn.click(
         fn=reset_ui,
         inputs=[reset_count],
-        outputs=[audio_input, stt_box, answer_box, audio_output, reset_count]
+        outputs=[audio_input, text_input, stt_box, answer_box, audio_output, reset_count]
     )
 # =========================================================
 # 🚀 실행
