@@ -45,12 +45,24 @@ def classify_intent(text):
 
     text = text.strip()
 
-    if any(k in text for k in ["공모주", "ipo", "청약"]):
-        return INTENT_IPO
-
-    if any(k in text for k in ["등록", "추가", "예약", "저장"]):
+    # 일정등록 우선
+    if any(k in text for k in [
+        "등록",
+        "추가",
+        "예약",
+        "저장"
+    ]):
         return INTENT_ADD
 
+    # 공모주 조회
+    if any(k in text for k in [
+        "공모주",
+        "ipo",
+        "청약"
+    ]):
+        return INTENT_IPO
+
+    # 일정 조회
     if any(k in text for k in [
         "일정",
         "조회",
