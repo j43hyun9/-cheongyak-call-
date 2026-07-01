@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.local
+
+# 루트 .gitignore의 *.json 규칙에서 프론트 필수 파일 제외
+!package.json
+!package-lock.json
