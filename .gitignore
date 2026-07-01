@@ -3,3 +3,8 @@
 *.mp3
 __pycache__/
 .venv/
+
+# 테스트/임시 파일
+*.json
+uvicorn_*.txt
+name_test.txt
