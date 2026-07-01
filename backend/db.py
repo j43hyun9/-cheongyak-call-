@@ -30,7 +30,6 @@ async def init_db() -> None:
                 reply              TEXT
             )
         """)
-        # TODO 김준서: conversation CRUD 함수 추가
         await db.execute("""
             CREATE TABLE IF NOT EXISTS conversation (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +39,6 @@ async def init_db() -> None:
                 created_at TEXT NOT NULL
             )
         """)
-        # TODO 김준서: ipo_cache 연계
         await db.execute("""
             CREATE TABLE IF NOT EXISTS ipo_cache (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -148,6 +146,59 @@ async def log_call(
         await db.commit()
 
 
+# ── conversation CRUD (김준서) ────────────────────────────────
+
+async def save_message(session_id: str, role: str, content: str) -> int:
+    """대화 한 턴 저장. 저장된 row id 반환."""
+    now = datetime.utcnow().isoformat()
+    async with get_db() as db:
+        cur = await db.execute(
+            "INSERT INTO conversation (session_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+            (session_id, role, content, now),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def load_history(session_id: str) -> list[dict]:
+    """세션의 전체 대화 이력 반환. [{role, content}, ...]"""
+    async with get_db() as db:
+        cur = await db.execute(
+            "SELECT role, content FROM conversation WHERE session_id = ? ORDER BY id",
+            (session_id,),
+        )
+        rows = await cur.fetchall()
+        return [{"role": r[0], "content": r[1]} for r in rows]
+
+
+# ── ipo_cache (김준서) ────────────────────────────────────────
+
+async def save_ipo_cache(data_json: str) -> None:
+    """공모주 크롤링 결과를 DB에 저장 (최신 1건만 유지)."""
+    now = datetime.utcnow().isoformat()
+    async with get_db() as db:
+        await db.execute("DELETE FROM ipo_cache")
+        await db.execute(
+            "INSERT INTO ipo_cache (fetched_at, data_json) VALUES (?, ?)",
+            (now, data_json),
+        )
+        await db.commit()
+
+
+async def load_ipo_cache() -> dict | None:
+    """저장된 공모주 캐시 반환. 없으면 None."""
+    async with get_db() as db:
+        cur = await db.execute(
+            "SELECT fetched_at, data_json FROM ipo_cache ORDER BY id DESC LIMIT 1"
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+        return {"fetched_at": row[0], "data_json": row[1]}
+
+
+# ── call log ──────────────────────────────────────────────────
+
 async def get_call_summary() -> dict:
     async with get_db() as db:
         cur = await db.execute("""
@@ -169,3 +220,18 @@ async def get_call_summary() -> dict:
             "total_cost_usd": round(row[4] or 0.0, 8),
             "avg_latency_ms": round(row[5] or 0.0, 1),
         }
+
+
+async def usage_summary() -> dict:
+    """제출물 '호출 로그 요약' 용 — 한국어 키 반환."""
+    raw = await get_call_summary()
+    total_tokens = raw["total_input_tokens"] + raw["total_output_tokens"]
+    avg_cost = (
+        raw["total_cost_usd"] / raw["total_calls"] if raw["total_calls"] else 0.0
+    )
+    return {
+        "총 호출수":         raw["total_calls"],
+        "총 토큰":           total_tokens,
+        "총 비용(USD)":      round(raw["total_cost_usd"], 6),
+        "1콜 평균비용(USD)": round(avg_cost, 6),
+    }
