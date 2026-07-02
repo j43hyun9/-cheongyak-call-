@@ -160,7 +160,7 @@ def call_colbi(
     history: list[dict],
     user_message: str,
     ipo_context: str = "",
-    model: str = "gpt-4o",
+    model: str = "gpt-4o-mini",
 ) -> dict:
     """
     로컬 테스트용. 실제 서비스 호출은 백엔드(임강 main.py)가 담당.

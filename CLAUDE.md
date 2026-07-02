@@ -48,9 +48,10 @@ DELETE /schedules/{id}            → {ok:true}
 - 커밋: feat / fix / refactor / chore / docs : 한 줄 설명
 
 ## 현재 develop 상태 (머지 기준 — 바뀔 때 갱신)
-- ✅ 병합 완료: backend-colby-api(/chat·/ipo/schedule·CRUD·크롤러·캐시), db-sqlite(conversation·ipo_cache·usage_summary), cleanup-backend-structure(구버전 스캐폴드 삭제→backend/ 일원화), persona-colbi(장두호 콜비 v5), frontend-chat(백승옥 React 챗UI+캘린더), CLAUDE.md
+- ✅ 병합 완료: backend-colby-api(/chat·/ipo/schedule·CRUD·크롤러·캐시), db-sqlite(conversation·ipo_cache·usage_summary), cleanup-backend-structure(구버전 스캐폴드 삭제→backend/ 일원화), persona-colbi(장두호 콜비 v5), frontend-chat(백승옥 React 챗UI+캘린더), colbi-tune(장두호 — gpt-4o-mini·IPO 키워드 보강), CLAUDE.md
 - ✅ **통합 실행 테스트 통과 (2026-07-02)**: 백엔드 기동 + /chat(콜비+RAG) + /ipo/schedule(크롤링 30건) + /schedules CRUD + 비용로그 정상
 - ⏳ 진행중: 세션 `_sessions` → SQLite 이전 (김준서)
+- ⏳ 머지 대기(PR): `feature/colbi-char`(장두호 — 캐릭터성 강화 v6, 답변 시작 패턴·GREETING)
 - ⏸ 보류(선택): PERSO 엔진 (gpt-4o-mini로 확정, 여유 시 도입)
 
 ## 팀원 담당 인계점
