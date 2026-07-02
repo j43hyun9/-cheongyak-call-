@@ -13,7 +13,8 @@
 - GitHub: https://github.com/j43hyun9/-cheongyak-call-  · 운영 브랜치: **develop**
 - 로컬 경로: `C:\AI_Human\teamproject\project2`
 - 실행: `uvicorn backend.main:app --reload --port 8000`
-- 스택: Python 3.11 / FastAPI / SQLite(aiosqlite) / **OpenAI gpt-4o-mini** / BeautifulSoup4(38.co.kr 크롤러)
+- 스택: Python 3.11 / FastAPI / SQLite(aiosqlite) / **OpenAI gpt-4o-mini (확정)** / BeautifulSoup4(38.co.kr 크롤러)
+- **엔진 방침: gpt-4o-mini 확정.** PERSO는 캠프 API 확보 시 여유 있으면 도입(선택) — `llm.py` engine 스위치로 교체 가능. 지금은 신경 쓸 필요 없음.
 
 ## 백엔드 파일 구조 (backend/ 만 정식)
 > 구버전 스캐폴드(루트 main.py, api/, core/, db/, services/)는 삭제됨. **참조 금지.**
@@ -22,7 +23,7 @@ backend/
 ├── main.py          FastAPI 진입점 (라우터·CORS·lifespan 통합)
 ├── config.py        pydantic-settings (.env: LLM_ENGINE·OPENAI_API_KEY 등)
 ├── cache.py         SHA-256 인메모리 응답 캐시 (TTL=1h)
-├── llm.py           AsyncOpenAI 호출 추상화 (engine: openai / perso / local)
+├── llm.py           AsyncOpenAI 호출 추상화 (engine: openai=기본·확정 / perso=여유시·선택 / local)
 ├── ipo_crawler.py   38.co.kr 공모주 크롤러 (asyncio.to_thread, 15분 캐시, EUC-KR)
 ├── db.py            SQLite CRUD: call_log·conversation·ipo_cache·schedules
 └── persona/colbi.py build_messages(history, user_message, ipo_context) → OpenAI 메시지 리스트
@@ -47,15 +48,17 @@ DELETE /schedules/{id}            → {ok:true}
 - 커밋: feat / fix / refactor / chore / docs : 한 줄 설명
 
 ## 현재 develop 상태 (머지 기준 — 바뀔 때 갱신)
-- ✅ 병합됨: `feature/backend-colby-api`(/chat·/ipo/schedule·CRUD·크롤러·캐시), `feature/db-sqlite`(conversation·ipo_cache CRUD, usage_summary)
-- ⏳ 머지 대기(PR): `feature/persona-colbi`(장두호), `feature/frontend-chat`(백승옥), `feature/cleanup-backend-structure`(구버전 스캐폴드 삭제)
+- ✅ 병합 완료: backend-colby-api(/chat·/ipo/schedule·CRUD·크롤러·캐시), db-sqlite(conversation·ipo_cache·usage_summary), cleanup-backend-structure(구버전 스캐폴드 삭제→backend/ 일원화), persona-colbi(장두호 콜비 v5), frontend-chat(백승옥 React 챗UI+캘린더), CLAUDE.md
+- ✅ **통합 실행 테스트 통과 (2026-07-02)**: 백엔드 기동 + /chat(콜비+RAG) + /ipo/schedule(크롤링 30건) + /schedules CRUD + 비용로그 정상
+- ⏳ 진행중: 세션 `_sessions` → SQLite 이전 (김준서)
+- ⏸ 보류(선택): PERSO 엔진 (gpt-4o-mini로 확정, 여유 시 도입)
 
 ## 팀원 담당 인계점
 - **장두호** — `backend/persona/colbi.py` SYSTEM_PROMPT 페르소나 카드 완성 / `backend/main.py _is_ipo_question()` 키워드 조정 가능
 - **김준서** — `backend/db.py` conversation·ipo_cache CRUD 완료. **`_sessions` 인메모리 → SQLite 이전 예정**
-- **전재형** — `backend/llm.py` `engine=="perso"` 블록에 PERSO API 구현 (현재 NotImplementedError)
+- **전재형** — PM·평가(eval 평가셋·리포트)·문서. `backend/llm.py` PERSO는 **여유 시(선택)** — 현재 NotImplementedError로 두고 openai(gpt-4o-mini) 엔진으로 동작
 - **백승옥** — `frontend/` : POST /chat, GET /ipo/schedule, CRUD /schedules 소비 (React 챗UI+캘린더)
-- **임강** — 백엔드 리드. 브랜치 리뷰·머지, PERSO 공동
+- **임강** — 백엔드 리드. 브랜치 리뷰·머지, 통합 안정화
 
 ## 주요 설계 결정 (바꾸기 전 임강과 협의)
 - IPO RAG: 공모주·청약 등 키워드 감지 시 크롤러 결과를 ipo_context로 자동 주입
