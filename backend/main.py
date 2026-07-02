@@ -20,15 +20,14 @@ from backend.db import (
     get_call_summary,
     get_schedules,
     init_db,
+    load_history,
     log_call,
+    save_message,
     update_schedule,
 )
 from backend.ipo_crawler import fetch_all_ipo, filter_ipo
 from backend.llm import call_llm
 from backend.persona.colbi import build_messages
-
-# ── 세션 (in-memory) — TODO 김준서: SQLite conversation 테이블로 이전 ──
-_sessions: dict[str, list[dict]] = {}
 
 _IPO_KW = {
     "공모주", "청약", "공모", "ipo", "상장", "주관사", "주간사",
@@ -147,7 +146,7 @@ async def chat(req: ChatReq):
             ipo_context = _items_to_context(all_ipo)
 
     # 3. 메시지 조립 (persona.colbi)
-    history = _sessions.get(session_id, [])
+    history = await load_history(session_id)
     messages = build_messages(history, req.message, ipo_context)
 
     # 4. LLM 호출
@@ -162,9 +161,8 @@ async def chat(req: ChatReq):
     cost_usd = round(_cost(result["input_tokens"], result["output_tokens"]), 8)
 
     # 5. 세션 이력 업데이트
-    history.append({"role": "user", "content": req.message})
-    history.append({"role": "assistant", "content": reply})
-    _sessions[session_id] = history
+    await save_message(session_id, "user", req.message)
+    await save_message(session_id, "assistant", reply)
 
     # 6. 캐시 저장 + 호출 로그
     cache.set(req.message, reply)
