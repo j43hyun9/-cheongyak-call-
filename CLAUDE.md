@@ -47,12 +47,12 @@ DELETE /schedules/{id}            → {ok:true}
 - 커밋: feat / fix / refactor / chore / docs : 한 줄 설명
 
 ## 현재 develop 상태 (머지 기준 — 바뀔 때 갱신)
-- ✅ 병합됨: `feature/backend-colby-api`(/chat·/ipo/schedule·CRUD·크롤러·캐시), `feature/db-sqlite`(conversation·ipo_cache CRUD, usage_summary)
-- ⏳ 머지 대기(PR): `feature/persona-colbi`(장두호), `feature/frontend-chat`(백승옥), `feature/cleanup-backend-structure`(구버전 스캐폴드 삭제)
+- ✅ 병합됨: `feature/backend-colby-api`(/chat·/ipo/schedule·CRUD·크롤러·캐시), `feature/db-sqlite`(김준서 — conversation·ipo_cache CRUD, usage_summary), `feature/add-claude-md`(CLAUDE.md 팀 공통 맥락 추가), `feature/cleanup-backend-structure`(구버전 스캐폴드 삭제), `feature/persona-colbi`(장두호), `feature/frontend-chat`(백승옥)
+- ⏳ 머지 대기(PR): 없음
 
 ## 팀원 담당 인계점
 - **장두호** — `backend/persona/colbi.py` SYSTEM_PROMPT 페르소나 카드 완성 / `backend/main.py _is_ipo_question()` 키워드 조정 가능
-- **김준서** — `backend/db.py` conversation·ipo_cache CRUD 완료. **`_sessions` 인메모리 → SQLite 이전 예정**
+- **김준서 (본인)** — `backend/db.py` conversation·ipo_cache CRUD 완료. **`_sessions` 인메모리 → SQLite 이전 예정**
 - **전재형** — `backend/llm.py` `engine=="perso"` 블록에 PERSO API 구현 (현재 NotImplementedError)
 - **백승옥** — `frontend/` : POST /chat, GET /ipo/schedule, CRUD /schedules 소비 (React 챗UI+캘린더)
 - **임강** — 백엔드 리드. 브랜치 리뷰·머지, PERSO 공동
