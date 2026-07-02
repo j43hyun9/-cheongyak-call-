@@ -48,7 +48,10 @@ DELETE /schedules/{id}            → {ok:true}
 
 ## 현재 develop 상태 (머지 기준 — 바뀔 때 갱신)
 - ✅ 병합됨: `feature/backend-colby-api`(/chat·/ipo/schedule·CRUD·크롤러·캐시), `feature/db-sqlite`(conversation·ipo_cache CRUD, usage_summary)
-- ⏳ 머지 대기(PR): `feature/persona-colbi`(장두호), `feature/frontend-chat`(백승옥), `feature/cleanup-backend-structure`(구버전 스캐폴드 삭제)
+- ✅ 병합됨: `feature/persona-colbi`(장두호 — COLBI_SYSTEM·FEWSHOT 5쌍·build_messages v5)
+- ✅ 병합됨: `feature/frontend-chat`(백승옥 — React+Vite ChatPage·CalendarPage)
+- ✅ 병합됨: `feature/cleanup-backend-structure`(구버전 스캐폴드 삭제)
+- ⏳ 머지 대기(PR): `feature/colbi-tune`(장두호 — gpt-4o-mini·IPO 키워드 보강)
 
 ## 팀원 담당 인계점
 - **장두호** — `backend/persona/colbi.py` SYSTEM_PROMPT 페르소나 카드 완성 / `backend/main.py _is_ipo_question()` 키워드 조정 가능
