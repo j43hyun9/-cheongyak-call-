@@ -138,6 +138,28 @@ body {
 .source-name    { font-weight: 700; color: #1d4ed8; margin-bottom: 4px; }
 .source-details { display: flex; flex-wrap: wrap; gap: 8px; color: #475569; }
 
+/* ─── Suggested Questions ─────────────────────────────────────────────────── */
+.suggested-questions { padding: 4px 4px 0; }
+.suggested-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+.suggested-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.suggested-btn {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 7px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.suggested-btn:hover { background: #dbeafe; border-color: #93c5fd; }
+
 /* ─── Input Bar ───────────────────────────────────────────────────────────── */
 .input-bar {
   display: flex;

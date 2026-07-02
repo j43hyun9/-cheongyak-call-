@@ -10,6 +10,13 @@ const INIT_MESSAGES = [
   },
 ];
 
+const SUGGESTED_QUESTIONS = [
+  '📅 이번 주 공모주 찾아줘',
+  '❓ 청약이 뭐야?',
+  '🏦 청약은 어떻게 해?',
+  '💰 최소 얼마 필요해?',
+];
+
 export default function ChatPage() {
   const [messages, setMessages] = useState(INIT_MESSAGES);
   const [input, setInput]       = useState('');
@@ -22,8 +29,8 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (override) => {
+    const text = (override ?? input).trim();
     if (!text || loading) return;
 
     setInput('');
@@ -87,6 +94,19 @@ export default function ChatPage() {
           </div>
         )}
 
+        {messages.length === 1 && !loading && (
+          <div className="suggested-questions">
+            <p className="suggested-title">💡 많이 물어보는 질문</p>
+            <div className="suggested-list">
+              {SUGGESTED_QUESTIONS.map((q) => (
+                <button key={q} className="suggested-btn" onClick={() => send(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -101,7 +121,7 @@ export default function ChatPage() {
           rows={1}
           disabled={loading}
         />
-        <button onClick={send} disabled={loading || !input.trim()}>
+        <button onClick={() => send()} disabled={loading || !input.trim()}>
           전송
         </button>
       </div>
