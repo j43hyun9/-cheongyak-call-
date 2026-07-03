@@ -10,12 +10,19 @@
 - **투자 판단·권유·수익 보장 절대 금지** (안내자 역할).
 - 목표: LLM 페르소나 + 웹 UI 챗봇(필수). 일정 CRUD·캘린더(추가). 로그인은 시간 여유 시(현재 단일 사용자, 인증 없음).
 
+> ### 🔄 방향 전환 (2026-07-02 강사님 피드백 반영 · 팀 합의 완료)
+> 2차의 무게중심 = **"데이터 확보 → 파인튜닝"**. 콜비(코난풍) **어투를 로컬 오픈모델에 QLoRA 파인튜닝**으로 학습시키는 게 핵심 과제.
+> - **RAG 제거**: 크롤링 일정을 프롬프트에 주입하던 방식(`_is_ipo_question`→`ipo_context`)은 **프로젝트3 기술이라 2차에선 배제** → 삭제. (단 크롤러·`/ipo/schedule`·캘린더는 **UI 기능으로 유지**)
+> - **튜닝 방식**: 로컬 오픈모델 **QLoRA**(Colab, Unsloth) 메인. 모델 후보 = **Qwen2.5-7B-Instruct**(무거우면 3B). OpenAI 파인튜닝은 시간부족 시 폴백(데이터셋 재사용).
+> - **데이터**: 콜비 어투 "질문→콜비스타일답변" JSONL(~200건). 씨앗 = 기존 few-shot·페르소나카드·평가셋. **평가셋 30문항은 학습 제외(held-out test, 전/후 비교용)**.
+> - **서빙**: 어댑터 병합 → GGUF → **Ollama** 로컬 실행 → `llm.py` local 엔진 연결.
+
 ## 환경
 - GitHub: https://github.com/j43hyun9/-cheongyak-call-  · 운영 브랜치: **develop**
 - 로컬 경로: `C:\AI_Human\teamproject\project2`
 - 실행: `uvicorn backend.main:app --reload --port 8000`
-- 스택: Python 3.11 / FastAPI / SQLite(aiosqlite) / **OpenAI gpt-4o-mini (확정)** / BeautifulSoup4(38.co.kr 크롤러)
-- **엔진 방침: gpt-4o-mini 확정.** PERSO는 캠프 API 확보 시 여유 있으면 도입(선택) — `llm.py` engine 스위치로 교체 가능. 지금은 신경 쓸 필요 없음.
+- 스택: Python 3.11 / FastAPI / SQLite(aiosqlite) / BeautifulSoup4(38.co.kr 크롤러) / **파인튜닝: 로컬 오픈모델(Qwen2.5) QLoRA + Ollama 서빙**
+- **엔진 방침(변경): 최종 목표 = 로컬 파인튜닝 모델(`llm.py` local 엔진 = Ollama).** gpt-4o-mini는 개발·검증·폴백용으로만 사용. PERSO는 폐기(2차 범위 밖).
 
 ## 백엔드 파일 구조 (backend/ 만 정식)
 > 구버전 스캐폴드(루트 main.py, api/, core/, db/, services/)는 삭제됨. **참조 금지.**
@@ -24,7 +31,7 @@ backend/
 ├── main.py          FastAPI 진입점 (라우터·CORS·lifespan 통합)
 ├── config.py        pydantic-settings (.env: LLM_ENGINE·OPENAI_API_KEY 등)
 ├── cache.py         SHA-256 인메모리 응답 캐시 (TTL=1h)
-├── llm.py           AsyncOpenAI 호출 추상화 (engine: openai=기본·확정 / perso=여유시·선택 / local)
+├── llm.py           엔진 추상화 (engine: local=목표(Ollama 파인튜닝모델) / openai=개발·폴백 / ~~perso 폐기~~)
 ├── ipo_crawler.py   38.co.kr 공모주 크롤러 (asyncio.to_thread, 15분 캐시, EUC-KR)
 ├── db.py            SQLite CRUD: call_log·conversation·ipo_cache·schedules
 └── persona/colbi.py build_messages(history, user_message, ipo_context) → OpenAI 메시지 리스트
@@ -50,22 +57,23 @@ DELETE /schedules/{id}            → {ok:true}
 
 ## 현재 develop 상태 (머지 기준 — 바뀔 때 갱신)
 - ✅ 병합 완료: backend-colby-api(/chat·/ipo/schedule·CRUD·크롤러·캐시), db-sqlite(conversation·ipo_cache·usage_summary), cleanup-backend-structure(구버전 스캐폴드 삭제→backend/ 일원화), persona-colbi(장두호 콜비 v5), frontend-chat(백승옥 React 챗UI+캘린더), colbi-tune(장두호 — gpt-4o-mini·IPO 키워드 보강), colbi-char(장두호 — 캐릭터성 강화 v6, 답변 시작 패턴·GREETING), CLAUDE.md
-- ✅ **통합 실행 테스트 통과 (2026-07-02)**: 백엔드 기동 + /chat(콜비+RAG) + /ipo/schedule(크롤링 30건) + /schedules CRUD + 비용로그 정상
-- ✅ 콜비 페르소나 `PERSONA_VERSION = "v6"` 확정, 응답 엔진 `gpt-4o-mini`
-- ⏳ 진행중: 세션 `_sessions` → SQLite 이전 (김준서)
-- ⏸ 보류(선택): PERSO 엔진 (gpt-4o-mini로 확정, 여유 시 도입)
-- 다음: 전재형 평가셋 기준 프롬프트 튜닝 (v7~)
+- ✅ 세션 `_sessions` → SQLite conversation 이전 완료 (김준서, PR#6 머지)
+- ✅ eval 평가셋 30문항 + 리포트 반영 (`eval/`), 콜비 `PERSONA_VERSION="v6"`
+- ✅ **통합 실행 테스트 통과 (2026-07-02)**: /chat + /ipo/schedule(30건) + /schedules CRUD + 비용로그 정상
+- 🔄 **방향 전환 착수 (2026-07-03~)**: 위 "🔄 방향 전환" 참조. RAG 제거 + 어투 데이터셋 + QLoRA 파인튜닝 + Ollama 서빙.
+- 다음(2주 플랜 7/3~7/15): ①어투 데이터셋(장두호) ②QLoRA 학습(전재형) ③RAG제거·서빙(임강) ④크롤러/캘린더 유지·전처리(김준서) ⑤프론트 연동(백승옥)
 
-## 팀원 담당 인계점
-- **장두호** — `backend/persona/colbi.py` SYSTEM_PROMPT 페르소나 카드 완성 / `backend/main.py _is_ipo_question()` 키워드 조정 가능
-- **김준서** — `backend/db.py` conversation·ipo_cache CRUD 완료. **`_sessions` 인메모리 → SQLite 이전 예정**
-- **전재형** — PM·평가(eval 평가셋·리포트)·문서. `backend/llm.py` PERSO는 **여유 시(선택)** — 현재 NotImplementedError로 두고 openai(gpt-4o-mini) 엔진으로 동작
-- **백승옥** — `frontend/` : POST /chat, GET /ipo/schedule, CRUD /schedules 소비 (React 챗UI+캘린더)
-- **임강** — 백엔드 리드. 브랜치 리뷰·머지, 통합 안정화
+## 팀원 담당 인계점 (2026-07-03 재분담 — 파인튜닝 전환 반영)
+- **장두호** — **콜비 어투 데이터셋 구축** (기존 `colbi.py` 프롬프트·few-shot → `data/colbi_sft.jsonl` 질문·답변 쌍 ~200건 생성·검수). 어투 일관성·가드레일 커버 책임. (기존: 페르소나 프롬프트)
+- **전재형(PM)** — 데이터셋 설계 총괄 + **QLoRA 학습 주도**(Colab, Unsloth+Qwen2.5-7B) + 파인튜닝 **전/후 평가 리포트**(평가셋 30 held-out) + 조율·발표·문서. CLAUDE.md 단독 관리.
+- **임강(백엔드 리드)** — **RAG 제거**(`main.py`의 `_is_ipo_question`→`ipo_context` 삭제, `/ipo/schedule`·크롤러는 유지) + `backend/llm.py` **local 엔진 구현**(Ollama HTTP 연결) + GGUF→Ollama 서빙 + 리뷰·머지·통합.
+- **김준서** — DB·세션 유지(완료) + **크롤러·`/ipo/schedule` 엔드포인트 유지·정리**(캘린더용, 챗봇과 분리) + **데이터 전처리 스크립트**(JSONL 포맷·dedup·train/val split) 지원.
+- **백승옥** — `frontend/` : 챗UI·캘린더 유지·연동. 최종적으로 파인튜닝 모델 응답으로 데모(백엔드가 모델 추상화하므로 /chat 계약 그대로). 변동 적음.
 
 ## 주요 설계 결정 (바꾸기 전 임강과 협의)
-- IPO RAG: 공모주·청약 등 키워드 감지 시 크롤러 결과를 ipo_context로 자동 주입
-- 세션: 현재 메모리 dict `_sessions` → 김준서가 SQLite 이전 예정. **바꾸지 말 것**
-- 비용 추정: .env `cost_per_1k_input` / `cost_per_1k_output`
+- ~~IPO RAG 자동 주입~~ → **제거**(2026-07-02, 프로젝트3 기술). 크롤러·`/ipo/schedule`·캘린더는 UI 기능으로 유지.
+- 파인튜닝: 로컬 오픈모델 QLoRA(Qwen2.5-7B, Colab+Unsloth) → GGUF → Ollama 서빙 → `llm.py` local 엔진. 데이터=`data/colbi_sft.jsonl`(~200건), 평가셋 30은 학습 제외.
+- 세션: `_sessions` → SQLite conversation 이전 **완료**(김준서 PR#6).
+- 비용 추정: .env `cost_per_1k_input` / `cost_per_1k_output` (개발용 gpt-4o-mini에만 해당)
 - DB 경로: 루트 `colby.db` (uvicorn 실행 위치 기준)
 - 크롤러 인코딩: EUC-KR → `resp.text` 자동 디코딩 후 BeautifulSoup 전달
