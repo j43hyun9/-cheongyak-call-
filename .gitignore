@@ -8,3 +8,7 @@ __pycache__/
 *.json
 uvicorn_*.txt
 name_test.txt
+
+# SFT 전처리 산출물 (seed 변경 시마다 재생성, prep_sft_data.py 참고)
+data/colbi_sft_train.jsonl
+data/colbi_sft_val.jsonl
