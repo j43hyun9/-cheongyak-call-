@@ -29,26 +29,6 @@ from backend.ipo_crawler import fetch_all_ipo, filter_ipo
 from backend.llm import call_llm
 from backend.persona.colbi import build_messages
 
-_IPO_KW = {
-    "공모주", "청약", "공모", "ipo", "상장", "주관사", "주간사",
-    "이번주", "다음주", "이번 주", "다음 주", "오늘 청약",
-    "수요예측", "따상", "환매청구권", "의무보유", "증거금",
-    "균등", "비례", "배정", "공모가", "밴드", "경쟁률",
-}
-
-
-def _is_ipo_question(msg: str) -> bool:
-    low = msg.lower()
-    return any(kw in low for kw in _IPO_KW)
-
-
-def _items_to_context(items: list[dict]) -> str:
-    return "\n".join(
-        f"- {it['name']}: 청약기간 {it['start']}~{it['end']}, "
-        f"공모가 {it['price']}원, 주관사 {it['underwriter']}"
-        for it in items
-    )
-
 
 def _cost(input_tokens: int, output_tokens: int) -> float:
     return (
@@ -136,20 +116,11 @@ async def chat(req: ChatReq):
             latency_ms=0,
         )
 
-    # 2. 공모주 RAG — 일정 관련 질문이면 크롤러 결과 주입
-    sources: list[dict] = []
-    ipo_context = ""
-    if _is_ipo_question(req.message):
-        all_ipo = await fetch_all_ipo()
-        if all_ipo:
-            sources = all_ipo
-            ipo_context = _items_to_context(all_ipo)
-
-    # 3. 메시지 조립 (persona.colbi)
+    # 2. 메시지 조립 (persona.colbi)
     history = await load_history(session_id)
-    messages = build_messages(history, req.message, ipo_context)
+    messages = build_messages(history, req.message)
 
-    # 4. LLM 호출
+    # 3. LLM 호출
     try:
         result = await call_llm(messages)
     except NotImplementedError as e:
@@ -160,11 +131,11 @@ async def chat(req: ChatReq):
     reply = result["text"]
     cost_usd = round(_cost(result["input_tokens"], result["output_tokens"]), 8)
 
-    # 5. 세션 이력 업데이트
+    # 4. 세션 이력 업데이트
     await save_message(session_id, "user", req.message)
     await save_message(session_id, "assistant", reply)
 
-    # 6. 캐시 저장 + 호출 로그
+    # 5. 캐시 저장 + 호출 로그
     cache.set(req.message, reply)
     await log_call(
         session_id=session_id, user_message=req.message, reply=reply,
@@ -175,7 +146,7 @@ async def chat(req: ChatReq):
 
     return ChatResp(
         reply=reply,
-        sources=sources,
+        sources=[],
         usage=UsageOut(
             model=result["engine"],
             input_tokens=result["input_tokens"],
