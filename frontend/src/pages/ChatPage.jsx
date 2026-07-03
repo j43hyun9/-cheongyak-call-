@@ -74,10 +74,12 @@ export default function ChatPage() {
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   };
 
+  const isEmpty = messages.length === 0 && !loading;
+
   return (
     <div className="chat-page">
-      <div className="chat-window">
-        {messages.length === 0 && !loading ? (
+      <div className={`chat-window${isEmpty ? ' chat-window--empty' : ''}`}>
+        {isEmpty ? (
           <div className="empty-state">
             <span className="empty-avatar">🕵️</span>
             <h2 className="empty-title">안녕하세요, 콜비예요!</h2>
