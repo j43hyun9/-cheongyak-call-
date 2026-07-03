@@ -2,23 +2,21 @@ import { useState, useEffect, useRef } from 'react';
 import { postChat } from '../api';
 import MessageBubble from '../components/MessageBubble';
 
-const INIT_MESSAGES = [
-  {
-    role: 'colby',
-    text: '안녕하세요! 저는 공모주 꼬마 탐정 콜비예요 🕵️\n청약 일정·절차·개념 등 뭐든 물어보세요!\n(투자 판단은 직접 해주세요 😊)',
-    sources: [],
-  },
-];
+const GREETING = {
+  role: 'colby',
+  text: '안녕하세요! 저는 공모주 꼬마 탐정 콜비예요 🕵️\n청약 일정·절차·개념 등 뭐든 물어보세요!\n(투자 판단은 직접 해주세요 😊)',
+  sources: [],
+};
 
 const SUGGESTED_QUESTIONS = [
-  '📅 이번 주 공모주 찾아줘',
-  '❓ 청약이 뭐야?',
-  '🏦 청약은 어떻게 해?',
-  '💰 최소 얼마 필요해?',
+  { icon: '📅', text: '이번 주 공모주 찾아줘' },
+  { icon: '❓', text: '청약이 뭐야?' },
+  { icon: '🏦', text: '청약은 어떻게 해?' },
+  { icon: '💰', text: '최소 얼마 필요해?' },
 ];
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState(INIT_MESSAGES);
+  const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
   const [loading, setLoading]   = useState(false);
   const sessionId   = useRef(crypto.randomUUID());
@@ -36,7 +34,10 @@ export default function ChatPage() {
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    setMessages((prev) => [...prev, { role: 'user', text, sources: [] }]);
+    setMessages((prev) => [
+      ...(prev.length === 0 ? [GREETING] : prev),
+      { role: 'user', text, sources: [] },
+    ]);
     setLoading(true);
 
     try {
@@ -76,9 +77,30 @@ export default function ChatPage() {
   return (
     <div className="chat-page">
       <div className="chat-window">
-        {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} />
-        ))}
+        {messages.length === 0 && !loading ? (
+          <div className="empty-state">
+            <span className="empty-avatar">🕵️</span>
+            <h2 className="empty-title">안녕하세요, 콜비예요!</h2>
+            <p className="empty-subtitle">
+              공모주 청약 일정과 절차, 궁금한 개념까지 뭐든 물어보세요.
+              <br />
+              투자 판단은 직접 해주셔야 해요 😊
+            </p>
+            <div className="suggested-questions">
+              <p className="suggested-title">💡 이런 질문 많이 물어봐요</p>
+              <div className="suggested-grid">
+                {SUGGESTED_QUESTIONS.map((q) => (
+                  <button key={q.text} className="suggested-card" onClick={() => send(q.text)}>
+                    <span className="suggested-icon">{q.icon}</span>
+                    <span>{q.text}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)
+        )}
 
         {loading && (
           <div className="bubble-wrap colby-wrap">
@@ -90,19 +112,6 @@ export default function ChatPage() {
                 <span className="dot" style={{ animationDelay: '0.2s' }} />
                 <span className="dot" style={{ animationDelay: '0.4s' }} />
               </div>
-            </div>
-          </div>
-        )}
-
-        {messages.length === 1 && !loading && (
-          <div className="suggested-questions">
-            <p className="suggested-title">💡 많이 물어보는 질문</p>
-            <div className="suggested-list">
-              {SUGGESTED_QUESTIONS.map((q) => (
-                <button key={q} className="suggested-btn" onClick={() => send(q)}>
-                  {q}
-                </button>
-              ))}
             </div>
           </div>
         )}

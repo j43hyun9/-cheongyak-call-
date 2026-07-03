@@ -71,6 +71,47 @@ body {
   gap: 18px;
 }
 
+/* ─── Empty State (첫 화면) ───────────────────────────────────────────────── */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 12px 8px;
+  min-height: 100%;
+  animation: fadeInUp 0.5s ease;
+}
+.empty-avatar {
+  font-size: 3.4rem;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 4px 10px rgba(37, 99, 235, 0.25));
+  animation: floatY 3.5s ease-in-out infinite;
+}
+.empty-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+.empty-subtitle {
+  font-size: 0.88rem;
+  color: #64748b;
+  line-height: 1.6;
+  margin-bottom: 28px;
+  max-width: 380px;
+  word-break: keep-all;
+}
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ─── Bubbles ─────────────────────────────────────────────────────────────── */
 .bubble-wrap { display: flex; align-items: flex-start; gap: 10px; }
 .colby-wrap  { justify-content: flex-start; }
@@ -139,26 +180,40 @@ body {
 .source-details { display: flex; flex-wrap: wrap; gap: 8px; color: #475569; }
 
 /* ─── Suggested Questions ─────────────────────────────────────────────────── */
-.suggested-questions { padding: 4px 4px 0; }
+.suggested-questions { width: 100%; max-width: 420px; }
 .suggested-title {
   font-size: 0.8rem;
   font-weight: 700;
   color: #64748b;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
-.suggested-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.suggested-btn {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1d4ed8;
-  padding: 7px 14px;
-  border-radius: 20px;
+.suggested-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.suggested-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #dbeafe;
+  color: #1e293b;
+  padding: 12px 14px;
+  border-radius: 14px;
   cursor: pointer;
   font-size: 0.85rem;
   font-family: inherit;
-  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
 }
-.suggested-btn:hover { background: #dbeafe; border-color: #93c5fd; }
+.suggested-card:hover {
+  transform: translateY(-2px);
+  border-color: #93c5fd;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.14);
+}
+.suggested-icon { font-size: 1.15rem; flex-shrink: 0; }
 
 /* ─── Input Bar ───────────────────────────────────────────────────────────── */
 .input-bar {
