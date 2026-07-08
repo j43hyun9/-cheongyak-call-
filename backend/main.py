@@ -117,8 +117,9 @@ async def chat(req: ChatReq):
         )
 
     # 2. 메시지 조립 (persona.colbi)
+    # local 엔진(파인튜닝 모델)은 어투를 학습했으므로 few-shot 제외해 토큰 절약
     history = await load_history(session_id)
-    messages = build_messages(history, req.message)
+    messages = build_messages(history, req.message, slim=(settings.llm_engine == "local"))
 
     # 3. LLM 호출
     try:
@@ -129,7 +130,9 @@ async def chat(req: ChatReq):
         return err("LLM_ERROR", f"LLM 호출 실패: {e}", 502)
 
     reply = result["text"]
-    cost_usd = round(_cost(result["input_tokens"], result["output_tokens"]), 8)
+    cost_usd = 0.0 if settings.llm_engine == "local" else round(
+        _cost(result["input_tokens"], result["output_tokens"]), 8
+    )
 
     # 4. 세션 이력 업데이트
     await save_message(session_id, "user", req.message)
