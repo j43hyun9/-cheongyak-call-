@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Literal
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, File, Form, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -28,6 +28,7 @@ from backend.db import (
 from backend.ipo_crawler import fetch_all_ipo, filter_ipo
 from backend.llm import call_llm
 from backend.persona.colbi import build_messages
+from backend.stt import is_supported_content_type, transcribe
 
 
 def _cost(input_tokens: int, output_tokens: int) -> float:
@@ -158,6 +159,38 @@ async def chat(req: ChatReq):
         ),
         latency_ms=result["elapsed_ms"],
     )
+
+
+# ── POST /stt ─────────────────────────────────────────────────
+
+class STTResp(BaseModel):
+    text: str
+
+
+@app.post("/stt", response_model=STTResp, tags=["stt"])
+async def stt(audio: UploadFile = File(...), session_id: str = Form("")):
+    content = await audio.read()
+    if not content:
+        return err("STT_EMPTY_AUDIO", "오디오 파일이 비어 있습니다.")
+    if not is_supported_content_type(audio.content_type):
+        return err(
+            "STT_UNSUPPORTED_FORMAT",
+            f"지원하지 않는 오디오 형식입니다: {audio.content_type}",
+        )
+
+    try:
+        result = await transcribe(audio.filename or "audio.webm", content)
+    except Exception as e:
+        return err("STT_FAILED", f"STT 처리 실패: {e}", 502)
+
+    if session_id:
+        await log_call(
+            session_id=session_id, user_message=None, reply=result["text"],
+            input_tokens=0, output_tokens=0, elapsed_ms=result["elapsed_ms"],
+            engine=result["engine"], cache_hit=False, cost_usd=0.0,
+        )
+
+    return STTResp(text=result["text"])
 
 
 # ── GET /ipo/schedule ─────────────────────────────────────────
