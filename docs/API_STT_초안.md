@@ -31,6 +31,6 @@
 
 ## 설계 메모
 
-- `backend/llm.py`가 `engine: openai/local/perso`로 추상화된 것처럼, STT도 `settings.stt_engine`(`openai`=1차 그대로 Whisper API / `local`=향후 faster-whisper 등)로 열어두면 "STT 고도화"(로컬 전환·지연시간 개선) 여지가 생김. 1차 구현은 `openai`만 있으므로, 우선 `openai` 엔진만 구현하고 인터페이스만 확장 가능하게 열어두는 것을 제안.
+- `backend/llm.py`가 `engine: openai/local/perso`로 추상화된 것처럼, STT도 `settings.stt_engine`(`openai`=Whisper API / `local`=faster-whisper, CPU)로 열어둠. 두 엔진 모두 구현 완료 — `local`은 `STT_LOCAL_MODEL`(기본 `base`)로 모델 크기 조절, GPU 없는 팀 환경 가정해 `device="cpu", compute_type="int8"` 고정.
 - 1차 `stt.py`의 `prompt="공모주, 청약, 등록, 일정, 회의 관련 명령입니다."` 힌트(도메인 특화 환각 방지)는 그대로 이식.
 - 미확정 사항 — PM/프론트와 확인 필요: STT 결과를 `/chat`으로 넘기는 흐름을 **프론트가 조합**(STT 호출 → 받은 text로 `/chat` 재호출)할지, 아니면 **`/stt`가 내부적으로 `/chat`까지 체이닝**할지.
