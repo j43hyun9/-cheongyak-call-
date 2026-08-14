@@ -246,3 +246,25 @@ async def logs_summary():
     summary = await get_call_summary()
     summary["cache"] = cache.stats()
     return summary
+
+# ── POST /tts ─────────────────────────────────────────────────
+
+import edge_tts
+from fastapi.responses import FileResponse
+
+class TTSRequest(BaseModel):
+    text: str
+
+async def _generate_audio(text: str, output_file: str):
+    communicate = edge_tts.Communicate(text, "ko-KR-SunHiNeural")
+    await communicate.save(output_file)
+
+@app.post("/tts", tags=["tts"])
+async def tts_endpoint(request: TTSRequest):
+    output_file = f"tts_{uuid.uuid4().hex}.mp3"
+    await _generate_audio(request.text, output_file)
+    return FileResponse(
+        output_file,
+        media_type="audio/mpeg",
+        filename="response.mp3"
+    )
