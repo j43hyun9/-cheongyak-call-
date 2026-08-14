@@ -153,7 +153,11 @@ def _to_sources(docs: list[Document]) -> list[dict]:
 
 # ── 4. 생성 + 응답 조립 ─────────────────────────────────────────────────
 
-_client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+_client = OpenAI(
+    base_url=OLLAMA_BASE_URL,
+    api_key="ollama",
+    default_headers={"ngrok-skip-browser-warning": "true"},  # ngrok 터널 경유 시 경고 인터스티셜 우회, 로컬 직결 시엔 무해
+)
 
 
 def ask_colbi(message: str, history: list[dict] | None = None) -> dict:
