@@ -1,0 +1,445 @@
+/* ════════════════════════════════════════════════════════════════════════
+   AI Human 콜비 — 키오스크형 화면 (colby-hub)
+   좌: 캐릭터 무대(stage-panel) · 우: 대화 패널(chat-panel) · 하단: 액션바
+   ════════════════════════════════════════════════════════════════════════ */
+
+.colby-hub {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px);
+  overflow: hidden;
+}
+
+.colby-hub__body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* ─── 좌측: 캐릭터 무대 패널 ──────────────────────────────────────────── */
+.colby-hub__stage-panel {
+  flex: 0 0 58%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 25%, #1e3a8a 0%, #0f172a 68%);
+  transition: background 0.4s ease;
+}
+
+.colby-hub__state-badge {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(6px);
+  z-index: 3;
+}
+
+.colby-hub__status {
+  position: relative;
+  z-index: 3;
+  margin-top: 26px;
+  padding: 8px 22px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e0f2fe;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  backdrop-filter: blur(4px);
+  white-space: pre-line;
+  text-align: center;
+}
+
+/* 은은한 AI 앰비언트 효과 (링 + 파티클) */
+.colby-hub__ambient {
+  position: absolute;
+  bottom: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(70%, 440px);
+  aspect-ratio: 1;
+  pointer-events: none;
+  z-index: 1;
+}
+.colby-hub__glow-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(96, 165, 250, 0.22);
+}
+.colby-hub__glow-ring--b { inset: 12%; border-color: rgba(96, 165, 250, 0.14); }
+
+.colby-hub__particles { position: absolute; inset: -6%; animation: colbyOrbitSpin 3s linear infinite; }
+.colby-hub__particles span {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #a78bfa;
+  box-shadow: 0 0 10px #a78bfa;
+}
+.colby-hub__particles span:nth-child(1) { top: 0;    left: 50%; }
+.colby-hub__particles span:nth-child(2) { top: 50%;  right: 0; }
+.colby-hub__particles span:nth-child(3) { bottom: 0; left: 50%; }
+.colby-hub__particles span:nth-child(4) { top: 50%;  left: 0; }
+
+@keyframes colbyOrbitSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ─── 캐릭터 표시 영역 (Stage) ────────────────────────────────────────
+   추후 이미지 / Live2D / Lottie / 3D 모델 도입 시 .avatar-container
+   내부만 교체하면 되도록 바깥 구조와 분리해둠. */
+.colby-stage {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+}
+
+.avatar-container {
+  position: relative;
+  width: min(88%, 480px);
+  height: clamp(340px, 64vh, 600px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* AI Human Avatar Stage — 실제 콜비 캐릭터 이미지가 표시되는 영역.
+   캐릭터는 CSS로 그리지 않고 이미지 파일(또는 플레이스홀더)만 놓는다. */
+.colby-character-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.4));
+  transform-origin: center;
+}
+
+.colby-character-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1.5px dashed rgba(148, 163, 184, 0.45);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  text-align: center;
+  padding: 20px;
+  transform-origin: bottom center;
+}
+.colby-character-placeholder-icon { font-size: 2.4rem; opacity: 0.7; }
+.colby-character-placeholder-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #cbd5e1;
+}
+.colby-character-placeholder-file {
+  font-size: 0.72rem;
+  font-family: 'Consolas', 'SFMono-Regular', monospace;
+  color: #64748b;
+  word-break: break-all;
+}
+
+/* ══════════════════════════ 상태별 표현 ══════════════════════════
+   아래 애니메이션은 avatar-container(캐릭터가 담기는 틀) 전체에 적용되므로
+   실제 이미지든 플레이스홀더든 동일하게 동작하고, 캐릭터 그림 자체와는 분리되어 있다. */
+
+/* IDLE — 은은한 breathing */
+.colby-hub__stage-panel--idle .avatar-container {
+  animation: colbyBreathe 3.6s ease-in-out infinite;
+}
+@keyframes colbyBreathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.02); }
+}
+
+/* LISTENING — 파랑/청록 pulse + 마이크 인디케이터(상단 배지) */
+.colby-hub__stage-panel--listening {
+  background: radial-gradient(ellipse at 50% 25%, #0e5f6e 0%, #0f172a 68%);
+}
+.colby-hub__stage-panel--listening .colby-hub__glow-ring--a,
+.colby-hub__stage-panel--listening .colby-hub__glow-ring--b {
+  border-color: rgba(45, 212, 191, 0.55);
+  animation: colbyPulseRing 1.5s ease-out infinite;
+}
+.colby-hub__stage-panel--listening .colby-hub__glow-ring--b { animation-delay: 0.3s; }
+.colby-hub__stage-panel--listening .avatar-container {
+  animation: colbyBreathe 1.3s ease-in-out infinite;
+}
+@keyframes colbyPulseRing {
+  0%   { transform: scale(0.9);  opacity: 0.9; }
+  70%  { transform: scale(1.15); opacity: 0; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+/* THINKING — AI processing 이펙트 (보라색 궤도 파티클) */
+.colby-hub__stage-panel--thinking {
+  background: radial-gradient(ellipse at 50% 25%, #4c1d95 0%, #0f172a 68%);
+}
+.colby-hub__stage-panel--thinking .colby-hub__glow-ring--a { border-color: rgba(167, 139, 250, 0.4); }
+.colby-hub__stage-panel--thinking .avatar-container {
+  animation: colbyTilt 2.4s ease-in-out infinite;
+}
+@keyframes colbyTilt {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(1.5deg); }
+}
+
+/* SPEAKING — 파랑 강조 pulse + 캐릭터 주변 voice waveform */
+.colby-hub__stage-panel--speaking {
+  background: radial-gradient(ellipse at 50% 25%, #1d4ed8 0%, #0f172a 68%);
+}
+.colby-hub__stage-panel--speaking .colby-hub__glow-ring--a,
+.colby-hub__stage-panel--speaking .colby-hub__glow-ring--b {
+  border-color: rgba(96, 165, 250, 0.5);
+  animation: colbyPulseRing 0.9s ease-out infinite;
+}
+.colby-hub__stage-panel--speaking .avatar-container {
+  animation: colbyBreathe 0.9s ease-in-out infinite;
+}
+
+/* speaking 상태에서 캐릭터 주변에 뜨는 음성 waveform.
+   나중에 TTS 오디오 볼륨에 맞춰 각 bar의 height를 실시간으로 바꾸면
+   그대로 립싱크/음성 시각화로 확장할 수 있다. */
+.colby-hub__waveform {
+  position: absolute;
+  bottom: -4%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 26px;
+  z-index: 2;
+}
+.colby-hub__waveform span {
+  width: 5px;
+  border-radius: 3px;
+  background: #60a5fa;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.7);
+  animation: colbyWaveformBar 0.9s ease-in-out infinite;
+}
+.colby-hub__waveform span:nth-child(1) { height: 8px;  animation-delay: 0s; }
+.colby-hub__waveform span:nth-child(2) { height: 18px; animation-delay: 0.08s; }
+.colby-hub__waveform span:nth-child(3) { height: 26px; animation-delay: 0.16s; }
+.colby-hub__waveform span:nth-child(4) { height: 14px; animation-delay: 0.24s; }
+.colby-hub__waveform span:nth-child(5) { height: 24px; animation-delay: 0.32s; }
+.colby-hub__waveform span:nth-child(6) { height: 16px; animation-delay: 0.4s; }
+.colby-hub__waveform span:nth-child(7) { height: 8px;  animation-delay: 0.48s; }
+
+@keyframes colbyWaveformBar {
+  0%, 100% { transform: scaleY(0.35); }
+  50%      { transform: scaleY(1); }
+}
+
+/* ─── 우측: 대화 패널 ─────────────────────────────────────────────────── */
+.colby-hub__chat-panel {
+  flex: 0 0 42%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #fff;
+  border-left: 1px solid #e2e8f0;
+}
+
+.colby-hub__chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #eef2ff;
+  flex-shrink: 0;
+}
+.colby-hub__chat-header-icon { font-size: 1.8rem; }
+.colby-hub__chat-header-title { font-size: 0.98rem; font-weight: 700; color: #1e293b; }
+.colby-hub__chat-header-sub   { font-size: 0.76rem; color: #64748b; margin-top: 2px; }
+
+.colby-hub__chat-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.colby-hub__bubble-wrap { display: flex; flex-direction: column; gap: 4px; max-width: 90%; }
+.colby-hub__bubble-wrap--colby { align-self: flex-start; align-items: flex-start; }
+.colby-hub__bubble-wrap--user  { align-self: flex-end;   align-items: flex-end; }
+
+.colby-hub__bubble-tag { font-size: 0.7rem; font-weight: 700; color: #2563eb; }
+
+.colby-hub__bubble {
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  word-break: keep-all;
+  white-space: pre-wrap;
+}
+.colby-hub__bubble--colby {
+  background: #fff;
+  border: 1px solid #dbeafe;
+  border-top-left-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  color: #1e293b;
+}
+.colby-hub__bubble--user {
+  background: #2563eb;
+  color: #fff;
+  border-top-right-radius: 4px;
+}
+
+.colby-hub__ipo-cards { display: flex; flex-direction: column; gap: 8px; }
+
+/* ─── 하단 액션바 ─────────────────────────────────────────────────────── */
+.colby-hub__action-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 24px;
+  background: #0f172a;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.colby-hub__mic-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  flex-shrink: 0;
+  font-size: 1.8rem;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(160deg, #2563eb, #1d4ed8);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
+  transition: transform 0.15s;
+}
+.colby-hub__mic-btn:hover:not(:disabled) { transform: scale(1.06); }
+.colby-hub__mic-btn:disabled { opacity: 0.45; cursor: default; }
+.colby-hub__mic-btn--active {
+  background: linear-gradient(160deg, #22c55e, #16a34a);
+  animation: colbyMicPulse 1.2s ease-in-out infinite;
+}
+@keyframes colbyMicPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+  50%      { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); }
+}
+
+.colby-hub__mic-hint {
+  width: 150px;
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: #e2e8f0;
+  white-space: pre-line;
+}
+
+.colby-hub__text-input { flex: 1; display: flex; gap: 8px; }
+.colby-hub__text-input input {
+  flex: 1;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #f1f5f9;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.colby-hub__text-input input::placeholder { color: #64748b; }
+.colby-hub__text-input input:focus { border-color: #3b82f6; }
+.colby-hub__text-input input:disabled { opacity: 0.6; }
+.colby-hub__text-input button {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0 20px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.colby-hub__text-input button:hover:not(:disabled) { background: #1d4ed8; }
+.colby-hub__text-input button:disabled { background: #475569; cursor: default; }
+
+/* ─── 개발용 컨트롤 (기본 숨김, 우하단 작은 토글) ────────────────────── */
+.colby-hub__dev-toggle {
+  position: fixed;
+  bottom: 14px;
+  right: 14px;
+  z-index: 80;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.colby-dev-controls {
+  position: fixed;
+  bottom: 54px;
+  right: 14px;
+  z-index: 80;
+  width: 210px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.colby-dev-title { font-size: 0.72rem; font-weight: 700; color: #94a3b8; margin-bottom: 8px; }
+.colby-dev-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.colby-dev-buttons button {
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #cbd5e1;
+  padding: 6px 4px;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.colby-dev-buttons button:hover { border-color: #60a5fa; }
+.colby-dev-buttons button.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+
+/* ─── 반응형 (좁은 화면: 위아래로 쌓기) ───────────────────────────────── */
+@media (max-width: 900px) {
+  .colby-hub__body { flex-direction: column; }
+  .colby-hub__stage-panel { flex: 0 0 auto; height: 48vh; }
+  .colby-hub__chat-panel { flex: 1; border-left: none; border-top: 1px solid #e2e8f0; }
+  .colby-hub__action-bar { flex-wrap: wrap; }
+  .colby-hub__mic-hint { width: auto; }
+}
