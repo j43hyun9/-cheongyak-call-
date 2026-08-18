@@ -127,9 +127,21 @@ def _get_vectorstore() -> FAISS:
 
 # ── 3. 검색 ────────────────────────────────────────────────────────────
 
-def retrieve(query: str, k: int = RETRIEVE_K) -> list[Document]:
+def _search_documents(query: str, k: int = RETRIEVE_K) -> list[Document]:
     retriever = _get_vectorstore().as_retriever(search_kwargs={"k": k})
     return retriever.invoke(query)
+
+
+def retrieve(query: str, k: int = RETRIEVE_K) -> tuple[str, list[dict]]:
+    """
+    RAG 검색 전용 공개 API (LLM 호출 없음).
+
+    /chat(backend/main.py)에서 build_messages(ipo_context=context)로 그대로 주입하고,
+    sources는 응답 필드로 그대로 반환한다. 검색 결과가 없으면 context=""를 반환하며,
+    이 경우 콜비는 "모른다"고 답한다(빈 ipo_context는 build_messages가 이미 그렇게 처리).
+    """
+    docs = _search_documents(query, k=k)
+    return _format_ipo_context(docs), _to_sources(docs)
 
 
 def _format_ipo_context(docs: list[Document]) -> str:
@@ -164,12 +176,15 @@ def ask_colbi(message: str, history: list[dict] | None = None) -> dict:
     """
     /chat 계약 v1 중 내(장두호) 담당 필드만 채워서 반환한다.
     {answer_text, sources, state, usage, latency_ms} — audio_url은 TTS 담당 몫이라 비움.
+
+    데모(demo.py)·페르소나 톤 검증 전용. 실제 backend/main.py의 /chat은
+    retrieve()로 검색만 하고 LLM 호출은 backend/llm.py의 call_llm()로 하므로
+    (Ollama 중복 호출 방지), 이 함수를 호출하지 않는다.
     """
     history = history or []
     t0 = time.monotonic()
 
-    docs = retrieve(message, k=RETRIEVE_K)
-    ipo_context = _format_ipo_context(docs)
+    ipo_context, sources = retrieve(message, k=RETRIEVE_K)
 
     # project2/backend/main.py의 컨벤션과 동일: 파인튜닝된 colbi-qwen에만 slim(few-shot 생략) 적용.
     # 대체 모델로 테스트할 땐 few-shot을 살려서 콜비 말투(2차와 동일한 예시)를 최대한 따라가게 한다.
@@ -183,7 +198,7 @@ def ask_colbi(message: str, history: list[dict] | None = None) -> dict:
 
     return {
         "answer_text": response.choices[0].message.content,
-        "sources": _to_sources(docs),
+        "sources": sources,
         "state": "speaking",
         "usage": {
             "input_tokens": usage.prompt_tokens if usage else 0,
