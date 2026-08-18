@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434/v1"
     ollama_model: str = "colbi-qwen"   # Ollama에 pull된 모델명 (파인튜닝 완료 후 설정)
 
+    stt_engine: str = "openai"   # "openai" | "local"(faster-whisper, CPU)
+    stt_model: str = "whisper-1"
+    stt_local_model: str = "base"   # faster-whisper 모델 크기 (tiny/base/small/medium)
+
     cost_per_1k_input: float = 0.00015   # gpt-4o-mini 기준
     cost_per_1k_output: float = 0.00060
 
