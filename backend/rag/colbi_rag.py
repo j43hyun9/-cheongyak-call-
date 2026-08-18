@@ -36,6 +36,13 @@ EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 CHUNK_SIZE = 600
 CHUNK_OVERLAP = 100
 RETRIEVE_K = 3
+# k 중 최소 이만큼은 개념(concept) 문서로 채운다.
+# 실크롤러 스케줄 문서(수십 건)가 concepts.jsonl(22건)보다 훨씬 많아서, 단일 인덱스
+# 통합 검색으론 "따상이 뭐야" 같은 개념 질문에서도 스케줄 문서가 top-k를 다 차지해버림
+# (실측: concept 문서가 40+개 후보 중 31위로 밀려 k=3 안에 전혀 안 잡힘, 2026-08-18).
+# 임베딩 모델(MiniLM)은 PM 확정 스펙이라 교체 불가 → source_type별로 인덱스를 나눠
+# 검색한 뒤 합치는 하이브리드 방식으로 완화한다.
+MIN_CONCEPT_K = 1
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "colbi-qwen")
@@ -91,58 +98,65 @@ def _load_concept_documents() -> list[Document]:
     return docs
 
 
-def load_documents(schedule_items: list[dict]) -> list[Document]:
-    return _load_schedule_documents(schedule_items) + _load_concept_documents()
+# ── 2. 청킹 + 임베딩 + FAISS 인덱스 (source_type별 분리) ────────────────
 
-
-# ── 2. 청킹 + 임베딩 + FAISS 인덱스 ────────────────────────────────────
-
-def build_vectorstore(schedule_items: list[dict]) -> FAISS:
-    raw_docs = load_documents(schedule_items)
-
+def _build_index(docs: list[Document], embeddings: HuggingFaceEmbeddings) -> FAISS:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
     )
-    docs = splitter.split_documents(raw_docs)
+    chunks = splitter.split_documents(docs)
+    return FAISS.from_documents(chunks, embedding=embeddings, distance_strategy=DistanceStrategy.COSINE)
 
+
+def build_vectorstores(schedule_items: list[dict]) -> dict[str, FAISS]:
     embeddings = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL,
         model_kwargs={"device": "cpu"},
         encode_kwargs={"normalize_embeddings": True},
     )
+    return {
+        "schedule": _build_index(_load_schedule_documents(schedule_items), embeddings),
+        "concept": _build_index(_load_concept_documents(), embeddings),
+    }
 
-    return FAISS.from_documents(docs, embedding=embeddings, distance_strategy=DistanceStrategy.COSINE)
+
+_VECTORSTORES: dict[str, FAISS] | None = None
 
 
-_VECTORSTORE: FAISS | None = None
-
-
-def _get_vectorstore() -> FAISS:
+def _get_vectorstores() -> dict[str, FAISS]:
     """
     지연 로드 폴백. FastAPI 서버에서는 init_index()가 lifespan에서 미리 채워두므로
     이 경로를 안 타고, demo.py 같은 단발성 스크립트 컨텍스트에서만 여기서 로드한다.
     (asyncio.run은 이미 실행 중인 이벤트 루프 안에서는 못 쓰므로, 서버 요청 처리 중엔
     반드시 init_index()로 미리 채워둔 인덱스를 재사용해야 한다.)
     """
-    global _VECTORSTORE
-    if _VECTORSTORE is None:
+    global _VECTORSTORES
+    if _VECTORSTORES is None:
         items = asyncio.run(ipo_crawler.fetch_all_ipo())
-        _VECTORSTORE = build_vectorstore(items)
-    return _VECTORSTORE
+        _VECTORSTORES = build_vectorstores(items)
+    return _VECTORSTORES
 
 
 async def init_index() -> None:
     """앱 시작 시 1회 호출해 FAISS 인덱스를 미리 로드한다(backend/main.py의 lifespan에서 사용)."""
-    global _VECTORSTORE
+    global _VECTORSTORES
     items = await ipo_crawler.fetch_all_ipo()
-    _VECTORSTORE = build_vectorstore(items)
+    _VECTORSTORES = build_vectorstores(items)
 
 
-# ── 3. 검색 ────────────────────────────────────────────────────────────
+# ── 3. 검색 (schedule/concept 인덱스를 각각 조회 후 병합) ───────────────
 
 def _search_documents(query: str, k: int = RETRIEVE_K) -> list[Document]:
-    retriever = _get_vectorstore().as_retriever(search_kwargs={"k": k})
-    return retriever.invoke(query)
+    stores = _get_vectorstores()
+    concept_k = min(k, max(MIN_CONCEPT_K, k // 3))
+    schedule_k = k - concept_k
+
+    hits: list[Document] = []
+    if schedule_k:
+        hits += stores["schedule"].as_retriever(search_kwargs={"k": schedule_k}).invoke(query)
+    if concept_k:
+        hits += stores["concept"].as_retriever(search_kwargs={"k": concept_k}).invoke(query)
+    return hits
 
 
 def retrieve(query: str, k: int = RETRIEVE_K) -> tuple[str, list[dict]]:
