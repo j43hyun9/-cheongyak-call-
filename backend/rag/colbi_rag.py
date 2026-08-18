@@ -47,8 +47,7 @@ IPO_LISTING_URL = "http://www.38.co.kr/html/fund/?o=k"
 
 # ── 1. 문서 로딩 (F1: 크롤러 / F2: 개념 문서) ──────────────────────────
 
-def _load_schedule_documents() -> list[Document]:
-    items = asyncio.run(ipo_crawler.fetch_all_ipo())
+def _load_schedule_documents(items: list[dict]) -> list[Document]:
     docs = []
     for item in items:
         text = (
@@ -92,14 +91,14 @@ def _load_concept_documents() -> list[Document]:
     return docs
 
 
-def load_documents() -> list[Document]:
-    return _load_schedule_documents() + _load_concept_documents()
+def load_documents(schedule_items: list[dict]) -> list[Document]:
+    return _load_schedule_documents(schedule_items) + _load_concept_documents()
 
 
 # ── 2. 청킹 + 임베딩 + FAISS 인덱스 ────────────────────────────────────
 
-def build_vectorstore() -> FAISS:
-    raw_docs = load_documents()
+def build_vectorstore(schedule_items: list[dict]) -> FAISS:
+    raw_docs = load_documents(schedule_items)
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
@@ -119,10 +118,24 @@ _VECTORSTORE: FAISS | None = None
 
 
 def _get_vectorstore() -> FAISS:
+    """
+    지연 로드 폴백. FastAPI 서버에서는 init_index()가 lifespan에서 미리 채워두므로
+    이 경로를 안 타고, demo.py 같은 단발성 스크립트 컨텍스트에서만 여기서 로드한다.
+    (asyncio.run은 이미 실행 중인 이벤트 루프 안에서는 못 쓰므로, 서버 요청 처리 중엔
+    반드시 init_index()로 미리 채워둔 인덱스를 재사용해야 한다.)
+    """
     global _VECTORSTORE
     if _VECTORSTORE is None:
-        _VECTORSTORE = build_vectorstore()
+        items = asyncio.run(ipo_crawler.fetch_all_ipo())
+        _VECTORSTORE = build_vectorstore(items)
     return _VECTORSTORE
+
+
+async def init_index() -> None:
+    """앱 시작 시 1회 호출해 FAISS 인덱스를 미리 로드한다(backend/main.py의 lifespan에서 사용)."""
+    global _VECTORSTORE
+    items = await ipo_crawler.fetch_all_ipo()
+    _VECTORSTORE = build_vectorstore(items)
 
 
 # ── 3. 검색 ────────────────────────────────────────────────────────────
