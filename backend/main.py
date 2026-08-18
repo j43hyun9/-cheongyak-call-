@@ -7,9 +7,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Literal
 
+import edge_tts
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from backend import cache
@@ -249,22 +250,18 @@ async def logs_summary():
 
 # ── POST /tts ─────────────────────────────────────────────────
 
-import edge_tts
-from fastapi.responses import FileResponse
-
 class TTSRequest(BaseModel):
     text: str
 
-async def _generate_audio(text: str, output_file: str):
+async def _generate_audio(text: str) -> bytes:
     communicate = edge_tts.Communicate(text, "ko-KR-SunHiNeural")
-    await communicate.save(output_file)
+    audio_bytes = bytearray()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_bytes.extend(chunk["data"])
+    return bytes(audio_bytes)
 
 @app.post("/tts", tags=["tts"])
 async def tts_endpoint(request: TTSRequest):
-    output_file = f"tts_{uuid.uuid4().hex}.mp3"
-    await _generate_audio(request.text, output_file)
-    return FileResponse(
-        output_file,
-        media_type="audio/mpeg",
-        filename="response.mp3"
-    )
+    audio_bytes = await _generate_audio(request.text)
+    return Response(content=audio_bytes, media_type="audio/mpeg")
