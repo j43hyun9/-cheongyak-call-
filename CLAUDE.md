@@ -60,12 +60,13 @@ DELETE /schedules/{id}            → {ok:true}
 - ✅ 세션 `_sessions` → SQLite conversation 이전 완료 (김준서, PR#6 머지)
 - ✅ eval 평가셋 30문항 + 리포트 반영 (`eval/`), 콜비 `PERSONA_VERSION="v6"`
 - ✅ **통합 실행 테스트 통과 (2026-07-02)**: /chat + /ipo/schedule(30건) + /schedules CRUD + 비용로그 정상
-- 🔄 **방향 전환 착수 (2026-07-03~)**: 위 "🔄 방향 전환" 참조. RAG 제거 + 어투 데이터셋 + QLoRA 파인튜닝 + Ollama 서빙.
-- 다음(2주 플랜 7/3~7/15): ①어투 데이터셋(장두호) ②QLoRA 학습(전재형) ③RAG제거·서빙(임강) ④크롤러/캘린더 유지·전처리(김준서) ⑤프론트 연동(백승옥)
+- 🔄 **방향 전환 (2026-07-03~)**: RAG 제거 + 어투 데이터셋 + QLoRA 파인튜닝 + Ollama 서빙.
+- ✅ RAG 제거(PR#7)·local 엔진(PR#8)·전처리 스크립트(PR#9) 머지 완료. ✅ **어투 데이터셋 완료(2026-07-06, 장두호 PR#10 정본)**: `data/colbi_sft.jsonl` 200건(eval 겹침 0), 전처리 → train 180/val 20. colbi.py 오타("스타일인걸") 수정 포함.
+- 다음(플랜 ~7/15): ①~~데이터셋~~✅완료 ②**QLoRA 학습(전재형)** ← 지금 여기 ③GGUF→Ollama 서빙 연결(임강) ④프론트 최종 연동(백승옥)
 
-## 팀원 담당 인계점 (2026-07-03 재분담 — 파인튜닝 전환 반영)
-- **장두호** — **콜비 어투 데이터셋 구축** (기존 `colbi.py` 프롬프트·few-shot → `data/colbi_sft.jsonl` 질문·답변 쌍 ~200건 생성·검수). 어투 일관성·가드레일 커버 책임. (기존: 페르소나 프롬프트)
-- **전재형(PM)** — 데이터셋 설계 총괄 + **QLoRA 학습 주도**(Colab, Unsloth+Qwen2.5-7B) + 파인튜닝 **전/후 평가 리포트**(평가셋 30 held-out) + 조율·발표·문서. CLAUDE.md 단독 관리.
+## 팀원 담당 인계점 (2026-07-06 — 데이터셋은 장두호 담당 유지)
+- **장두호** — **콜비 어투 데이터셋 담당**(완료: `data/colbi_sft.jsonl` 200건, PR#10) + `colbi.py` 페르소나 어투 유지. 데이터 소스는 장두호가 관리(단일 파일 `colbi_sft.jsonl`).
+- **전재형(PM)** — **QLoRA 학습 주도**(Colab, Unsloth+Qwen2.5-7B, `colbi_sft.jsonl` 입력) + 파인튜닝 **전/후 평가 리포트**(평가셋 30 held-out) + 조율·발표·문서. CLAUDE.md 단독 관리.
 - **임강(백엔드 리드)** — **RAG 제거**(`main.py`의 `_is_ipo_question`→`ipo_context` 삭제, `/ipo/schedule`·크롤러는 유지) + `backend/llm.py` **local 엔진 구현**(Ollama HTTP 연결) + GGUF→Ollama 서빙 + 리뷰·머지·통합.
 - **김준서** — DB·세션 유지(완료) + **크롤러·`/ipo/schedule` 엔드포인트 유지·정리**(캘린더용, 챗봇과 분리) + **데이터 전처리 스크립트**(JSONL 포맷·dedup·train/val split) 지원.
 - **백승옥** — `frontend/` : 챗UI·캘린더 유지·연동. 최종적으로 파인튜닝 모델 응답으로 데모(백엔드가 모델 추상화하므로 /chat 계약 그대로). 변동 적음.

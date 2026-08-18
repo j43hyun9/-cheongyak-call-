@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Literal
 
 import edge_tts
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, File, Form, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
@@ -29,26 +29,7 @@ from backend.db import (
 from backend.ipo_crawler import fetch_all_ipo, filter_ipo
 from backend.llm import call_llm
 from backend.persona.colbi import build_messages
-
-_IPO_KW = {
-    "공모주", "청약", "공모", "ipo", "상장", "주관사", "주간사",
-    "이번주", "다음주", "이번 주", "다음 주", "오늘 청약",
-    "수요예측", "따상", "환매청구권", "의무보유", "증거금",
-    "균등", "비례", "배정", "공모가", "밴드", "경쟁률",
-}
-
-
-def _is_ipo_question(msg: str) -> bool:
-    low = msg.lower()
-    return any(kw in low for kw in _IPO_KW)
-
-
-def _items_to_context(items: list[dict]) -> str:
-    return "\n".join(
-        f"- {it['name']}: 청약기간 {it['start']}~{it['end']}, "
-        f"공모가 {it['price']}원, 주관사 {it['underwriter']}"
-        for it in items
-    )
+from backend.stt import is_supported_content_type, transcribe
 
 
 def _cost(input_tokens: int, output_tokens: int) -> float:
@@ -137,20 +118,12 @@ async def chat(req: ChatReq):
             latency_ms=0,
         )
 
-    # 2. 공모주 RAG — 일정 관련 질문이면 크롤러 결과 주입
-    sources: list[dict] = []
-    ipo_context = ""
-    if _is_ipo_question(req.message):
-        all_ipo = await fetch_all_ipo()
-        if all_ipo:
-            sources = all_ipo
-            ipo_context = _items_to_context(all_ipo)
-
-    # 3. 메시지 조립 (persona.colbi)
+    # 2. 메시지 조립 (persona.colbi)
+    # local 엔진(파인튜닝 모델)은 어투를 학습했으므로 few-shot 제외해 토큰 절약
     history = await load_history(session_id)
-    messages = build_messages(history, req.message, ipo_context)
+    messages = build_messages(history, req.message, slim=(settings.llm_engine == "local"))
 
-    # 4. LLM 호출
+    # 3. LLM 호출
     try:
         result = await call_llm(messages)
     except NotImplementedError as e:
@@ -159,13 +132,15 @@ async def chat(req: ChatReq):
         return err("LLM_ERROR", f"LLM 호출 실패: {e}", 502)
 
     reply = result["text"]
-    cost_usd = round(_cost(result["input_tokens"], result["output_tokens"]), 8)
+    cost_usd = 0.0 if settings.llm_engine == "local" else round(
+        _cost(result["input_tokens"], result["output_tokens"]), 8
+    )
 
-    # 5. 세션 이력 업데이트
+    # 4. 세션 이력 업데이트
     await save_message(session_id, "user", req.message)
     await save_message(session_id, "assistant", reply)
 
-    # 6. 캐시 저장 + 호출 로그
+    # 5. 캐시 저장 + 호출 로그
     cache.set(req.message, reply)
     await log_call(
         session_id=session_id, user_message=req.message, reply=reply,
@@ -176,7 +151,7 @@ async def chat(req: ChatReq):
 
     return ChatResp(
         reply=reply,
-        sources=sources,
+        sources=[],
         usage=UsageOut(
             model=result["engine"],
             input_tokens=result["input_tokens"],
@@ -185,6 +160,38 @@ async def chat(req: ChatReq):
         ),
         latency_ms=result["elapsed_ms"],
     )
+
+
+# ── POST /stt ─────────────────────────────────────────────────
+
+class STTResp(BaseModel):
+    text: str
+
+
+@app.post("/stt", response_model=STTResp, tags=["stt"])
+async def stt(audio: UploadFile = File(...), session_id: str = Form("")):
+    content = await audio.read()
+    if not content:
+        return err("STT_EMPTY_AUDIO", "오디오 파일이 비어 있습니다.")
+    if not is_supported_content_type(audio.content_type):
+        return err(
+            "STT_UNSUPPORTED_FORMAT",
+            f"지원하지 않는 오디오 형식입니다: {audio.content_type}",
+        )
+
+    try:
+        result = await transcribe(audio.filename or "audio.webm", content)
+    except Exception as e:
+        return err("STT_FAILED", f"STT 처리 실패: {e}", 502)
+
+    if session_id:
+        await log_call(
+            session_id=session_id, user_message=None, reply=result["text"],
+            input_tokens=0, output_tokens=0, elapsed_ms=result["elapsed_ms"],
+            engine=result["engine"], cache_hit=False, cost_usd=0.0,
+        )
+
+    return STTResp(text=result["text"])
 
 
 # ── GET /ipo/schedule ─────────────────────────────────────────
