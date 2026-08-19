@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import ChatPage from './pages/ChatPage';
 import CalendarPage from './pages/CalendarPage';
+import ColbyAvatarPage from './pages/ColbyAvatarPage';
 
 export default function App() {
   const [tab, setTab] = useState('chat');
@@ -28,11 +29,17 @@ export default function App() {
           >
             📅 캘린더
           </button>
+          <button
+            className={tab === 'avatar' ? 'active' : ''}
+            onClick={() => setTab('avatar')}
+          >
+            🕵️ AI Human
+          </button>
         </nav>
       </header>
 
       <main className="main-content">
-        {tab === 'chat' ? <ChatPage /> : <CalendarPage />}
+        {tab === 'chat' ? <ChatPage /> : tab === 'calendar' ? <CalendarPage /> : <ColbyAvatarPage />}
       </main>
     </div>
   );

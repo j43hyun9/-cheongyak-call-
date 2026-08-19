@@ -43,7 +43,7 @@ export async function postChat(session_id, message) {
     await delay(700);
     const isScheduleQ = ['일정', '청약', 'ipo'].some((k) => message.includes(k));
     return {
-      reply: mockColbyReply(message),
+      answer_text: mockColbyReply(message),
       sources: isScheduleQ ? MOCK_IPO_ITEMS.slice(0, 2) : [],
       usage: { model: 'mock', input_tokens: 48, output_tokens: 92, cost_usd: 0 },
       latency_ms: 700,

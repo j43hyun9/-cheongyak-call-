@@ -46,7 +46,7 @@ export default function ChatPage() {
         ...prev,
         {
           role: 'colby',
-          text: data.reply,
+          text: data.answer_text,
           sources: data.sources ?? [],
           usage: data.usage,
           latency_ms: data.latency_ms,
