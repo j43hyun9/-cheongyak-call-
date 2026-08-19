@@ -21,7 +21,7 @@
 > - **AI Human**: 콜비 아바타 상태머신 + Lip Sync (TTS 음성에 맞춰 입 모양).
 > - **음성**: Whisper STT + gTTS TTS (1차 자산 재활용).
 > - **LLM**: `colbi-qwen` (Ollama, 2차 파인튜닝 모델) 그대로 유지.
-> - **마감**: 2026-08-21.
+> - **마감**: 2026-08-24.
 
 ## 환경
 - GitHub: https://github.com/j43hyun9/-cheongyak-call-  · 운영 브랜치: **develop**
@@ -70,7 +70,7 @@ DELETE /schedules/{id}            → {ok:true}
 - 순서: `git checkout develop && git pull` → `git checkout -b feature/기능명` → 작업 → push → PR (제목에 담당자명)
 - 커밋: feat / fix / refactor / chore / docs : 한 줄 설명
 
-## 현재 develop 상태 (머지 기준 — 바뀔 때 갱신, 2026-08-19 기준)
+## 현재 develop 상태 (머지 기준 — 바뀔 때 갱신, 2026-08-19 기준 · 마감 2026-08-24)
 - ✅ 2차 기반 (유지): /chat·/ipo/schedule·CRUD·크롤러·캐시·SQLite·페르소나 v6·QLoRA 데이터셋·Ollama local 엔진
 - ✅ STT 고도화·FastAPI 연결 (임강, PR#13·#14)
 - ✅ TTS 고도화·/tts 백엔드 통합 (김준서·임강, PR#17)
