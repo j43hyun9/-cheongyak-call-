@@ -91,8 +91,10 @@ class UsageOut(BaseModel):
 
 
 class ChatResp(BaseModel):
-    reply: str
-    sources: list[dict]
+    answer_text: str
+    audio_url: str | None = None  # None until TTS(/tts) 연동(김준서)
+    state: Literal["idle", "listening", "thinking", "speaking"] = "speaking"
+    sources: list[dict]  # RAG 연동 전까지 []. 연동 후 {title,url,snippet} 형태(장두호)
     usage: UsageOut
     latency_ms: int
 
@@ -113,7 +115,7 @@ async def chat(req: ChatReq):
             engine="cache", cache_hit=True, cost_usd=0.0,
         )
         return ChatResp(
-            reply=cached, sources=[],
+            answer_text=cached, audio_url=None, state="speaking", sources=[],
             usage=UsageOut(model="cache", input_tokens=0, output_tokens=0, cost_usd=0.0),
             latency_ms=0,
         )
@@ -150,7 +152,9 @@ async def chat(req: ChatReq):
     )
 
     return ChatResp(
-        reply=reply,
+        answer_text=reply,
+        audio_url=None,
+        state="speaking",
         sources=[],
         usage=UsageOut(
             model=result["engine"],
