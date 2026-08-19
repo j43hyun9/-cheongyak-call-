@@ -29,6 +29,7 @@ from backend.db import (
 from backend.ipo_crawler import fetch_all_ipo, filter_ipo
 from backend.llm import call_llm
 from backend.persona.colbi import build_messages
+from backend.rag.colbi_rag import init_index, retrieve
 from backend.stt import is_supported_content_type, transcribe
 
 
@@ -51,6 +52,7 @@ def err(code: str, message: str, status: int = 400) -> JSONResponse:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await init_index()  # FAISS 인덱스 1회 로드 (요청마다 재색인 금지)
     yield
 
 
@@ -94,7 +96,7 @@ class ChatResp(BaseModel):
     answer_text: str
     audio_url: str | None = None  # None until TTS(/tts) 연동(김준서)
     state: Literal["idle", "listening", "thinking", "speaking"] = "speaking"
-    sources: list[dict]  # RAG 연동 전까지 []. 연동 후 {title,url,snippet} 형태(장두호)
+    sources: list[dict]  # RAG(backend/rag) 검색 결과. {title,snippet,type,url}, 검색 결과 없으면 []
     usage: UsageOut
     latency_ms: int
 
@@ -120,12 +122,17 @@ async def chat(req: ChatReq):
             latency_ms=0,
         )
 
-    # 2. 메시지 조립 (persona.colbi)
+    # 2. RAG 검색 (backend/rag, 장두호) — 검색만 하고 LLM은 호출하지 않음
+    ipo_context, sources = retrieve(req.message)
+
+    # 3. 메시지 조립 (persona.colbi)
     # local 엔진(파인튜닝 모델)은 어투를 학습했으므로 few-shot 제외해 토큰 절약
     history = await load_history(session_id)
-    messages = build_messages(history, req.message, slim=(settings.llm_engine == "local"))
+    messages = build_messages(
+        history, req.message, ipo_context=ipo_context, slim=(settings.llm_engine == "local")
+    )
 
-    # 3. LLM 호출
+    # 4. LLM 호출
     try:
         result = await call_llm(messages)
     except NotImplementedError as e:
@@ -138,11 +145,11 @@ async def chat(req: ChatReq):
         _cost(result["input_tokens"], result["output_tokens"]), 8
     )
 
-    # 4. 세션 이력 업데이트
+    # 5. 세션 이력 업데이트
     await save_message(session_id, "user", req.message)
     await save_message(session_id, "assistant", reply)
 
-    # 5. 캐시 저장 + 호출 로그
+    # 6. 캐시 저장 + 호출 로그
     cache.set(req.message, reply)
     await log_call(
         session_id=session_id, user_message=req.message, reply=reply,
@@ -155,7 +162,7 @@ async def chat(req: ChatReq):
         answer_text=reply,
         audio_url=None,
         state="speaking",
-        sources=[],
+        sources=sources,
         usage=UsageOut(
             model=result["engine"],
             input_tokens=result["input_tokens"],
