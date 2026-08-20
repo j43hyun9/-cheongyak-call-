@@ -1,8 +1,8 @@
 import { COLBY_STATES } from './useColbyState';
 
 // 화면 하단 액션바 — 큰 마이크 버튼 + 텍스트 입력.
-// 실제 STT 연결 전이므로, 마이크를 누르면 정해진 데모 문장으로
-// listening → thinking → speaking → idle 흐름만 미리 보여준다 (네트워크 호출 없음).
+// 마이크 클릭 1회차: 녹음 시작(listening), 2회차: 녹음 종료 → STT/chat/TTS 파이프라인
+// 실행(부모 ColbyAvatarPage가 담당). 처리 중(thinking/speaking)에는 버튼 비활성화.
 export default function ColbyActionBar({ state, input, onInputChange, onSend, onMicClick }) {
   const busy = state === COLBY_STATES.THINKING || state === COLBY_STATES.SPEAKING;
   const listening = state === COLBY_STATES.LISTENING;
@@ -17,7 +17,7 @@ export default function ColbyActionBar({ state, input, onInputChange, onSend, on
         className={`colby-hub__mic-btn${listening ? ' colby-hub__mic-btn--active' : ''}`}
         onClick={onMicClick}
         disabled={busy}
-        title={listening ? '말을 마쳤으면 다시 클릭' : '마이크로 말하기 (데모)'}
+        title={listening ? '말을 마쳤으면 다시 클릭' : '마이크로 말하기'}
       >
         🎤
       </button>

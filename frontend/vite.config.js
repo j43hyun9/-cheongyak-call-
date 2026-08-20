@@ -10,6 +10,8 @@ export default defineConfig({
       '/chat':      { target: 'http://localhost:8000', changeOrigin: true },
       '/ipo':       { target: 'http://localhost:8000', changeOrigin: true },
       '/schedules': { target: 'http://localhost:8000', changeOrigin: true },
+      '/stt':       { target: 'http://localhost:8000', changeOrigin: true },
+      '/tts':       { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
 });

@@ -51,6 +51,36 @@ export async function postChat(session_id, message) {
   }
 }
 
+// ─── POST /stt ─────────────────────────────────────────────────────────────────
+// audioBlob: MediaRecorder가 만든 오디오 Blob (webm/opus 등).
+// 실패 시 mock으로 대체하지 않고 그대로 throw — 호출부(ColbyAvatarPage)에서
+// catch해서 idle 복귀 + 에러 메시지 표시를 책임진다.
+export async function postStt(audioBlob, session_id = '') {
+  const form = new FormData();
+  form.append('audio', audioBlob, 'audio.webm');
+  form.append('session_id', session_id);
+
+  const res = await fetch(`${BASE}/stt`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) throw new Error(`STT 요청 실패: ${res.status} ${res.statusText}`);
+  return await res.json(); // { text }
+}
+
+// ─── POST /tts ─────────────────────────────────────────────────────────────────
+// 응답이 JSON이 아니라 audio/mpeg 바이너리이므로 blob으로 받는다.
+// 실패 시 mock으로 대체하지 않고 그대로 throw.
+export async function postTts(text) {
+  const res = await fetch(`${BASE}/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(`TTS 요청 실패: ${res.status} ${res.statusText}`);
+  return await res.blob(); // audio/mpeg Blob
+}
+
 // ─── GET /ipo/schedule ─────────────────────────────────────────────────────────
 export async function getIpoSchedule(range = 'all') {
   try {
