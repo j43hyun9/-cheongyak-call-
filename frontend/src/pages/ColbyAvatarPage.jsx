@@ -94,8 +94,6 @@ export default function ColbyAvatarPage() {
           });
         })
         .catch(() => {
-          // #15(chat-api-v1)·#18(RAG-/chat 연동)이 develop에 아직 없으므로
-          // 이 단계까지는 도달하지 않을 수 있음 — 아래 sendToColby 주석 참고.
           showError('음성 합성(TTS) 요청에 실패했어요.');
           toIdle();
           resolve();
@@ -103,10 +101,6 @@ export default function ColbyAvatarPage() {
     });
 
   // POST /chat → answer_text 표시 → speak(answer_text).
-  // NOTE: develop 백엔드는 아직 v1 스키마(#15)가 아니라 `reply` 필드를 반환한다.
-  // 여기서는 최종 계약대로 `answer_text`만 읽고 `reply`로의 우회(fallback)를
-  // 일부러 넣지 않았다 — #15가 develop에 반영되기 전까지는 이 단계에서
-  // "콜비가 답변을 만들지 못했어요" 에러로 불일치가 그대로 드러나야 한다.
   const sendToColby = async (userText) => {
     setMessages((prev) => [...prev, { role: 'user', text: userText }]);
     setIpoItems([]);
