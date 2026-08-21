@@ -272,7 +272,12 @@ class TTSRequest(BaseModel):
     text: str
 
 async def _generate_audio(text: str) -> bytes:
-    communicate = edge_tts.Communicate(text, "ko-KR-SunHiNeural")
+    # 11살 소년 톤 — 짱구 느낌이 살짝 나도록 pitch를 더 올리고, 통통 튀는
+    # 느낌을 위해 rate도 살짝 올림. (edge-tts는 피치/속도/볼륨만 조절 가능해
+    # 콧소리 같은 음색 자체는 재현 불가 — 이 두 파라미터가 낼 수 있는 한계치)
+    communicate = edge_tts.Communicate(
+        text, "ko-KR-InJoonNeural", rate="+8%", pitch="+60Hz"
+    )
     audio_bytes = bytearray()
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
