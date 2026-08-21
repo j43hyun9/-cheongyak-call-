@@ -16,48 +16,48 @@ tts.save("output.mp3")
 playsound.playsound("output.mp3")
 ```
 
----
-
 ## 2. Edge-TTS로 고도화 (3차)
 
 - gTTS 대비 훨씬 자연스러운 한국어 음성 (`ko-KR-SunHiNeural`)
 - FastAPI `async/await` 구조와 호환
 - 마찬가지로 무료 — 비용 부담 없음
 - AI Human 콜비 캐릭터 특성상 자연스러운 음성이 중요
+- **파일 저장 없이 메모리 스트리밍 방식으로 구현** → 동시성 문제 근본 해결
 
 ```python
-import edge_tts
-import uuid
+async def _generate_audio(text: str) -> bytes:
+    communicate = edge_tts.Communicate(text, "ko-KR-SunHiNeural")
+    audio_bytes = bytearray()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_bytes.extend(chunk["data"])
+    return bytes(audio_bytes)
 
-VOICE = "ko-KR-SunHiNeural"
-
-async def _generate_audio(text: str, output_file: str):
-    communicate = edge_tts.Communicate(text, VOICE)
-    await communicate.save(output_file)
-
-@app.post("/tts")
+@app.post("/tts", tags=["tts"])
 async def tts_endpoint(request: TTSRequest):
-    output_file = f"tts_{uuid.uuid4().hex}.mp3"
-    await _generate_audio(request.text, output_file)
-    return FileResponse(output_file, media_type="audio/mpeg")
+    audio_bytes = await _generate_audio(request.text)
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 ```
 
 ---
 
 ## 3. 구현 중 해결한 이슈
 
-**동시성 문제** → `uuid` 파일명으로 해결
+**동시성 문제** → 파일을 아예 저장하지 않는 메모리 스트리밍 방식으로 근본 해결
 
 ```python
-# 기존 - 고정 파일명 (문제)
-output_file = "response.mp3"
-
-# 수정 - 요청마다 고유 파일명
+# 기존 - 파일 저장 방식 (동시성 문제 있음)
 output_file = f"tts_{uuid.uuid4().hex}.mp3"
+await communicate.save(output_file)
+return FileResponse(output_file, media_type="audio/mpeg")
+
+# 최종 - 메모리 스트리밍 방식 (파일 저장 없음)
+audio_bytes = await _generate_audio(request.text)
+return Response(content=audio_bytes, media_type="audio/mpeg")
 ```
 
 **응답 형식** → PM 확정으로 바이너리 직접 반환 채택
 
 ```python
-return FileResponse(output_file, media_type="audio/mpeg")
+return Response(content=audio_bytes, media_type="audio/mpeg")
 ```
