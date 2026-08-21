@@ -29,6 +29,7 @@ from backend.db import (
 from backend.ipo_crawler import fetch_all_ipo, filter_ipo
 from backend.llm import call_llm
 from backend.persona.colbi import build_messages
+from backend.persona.sanitize import strip_persona_artifacts
 from backend.rag.colbi_rag import init_index, retrieve
 from backend.stt import is_supported_content_type, transcribe
 
@@ -109,8 +110,12 @@ async def chat(req: ChatReq):
     session_id = req.session_id or str(uuid.uuid4())
 
     # 1. 응답 캐시 확인
+    # 방어적으로 후처리 적용 — 이 후처리를 붙이기 전에 캐시된(이모지 섞인)
+    # 옛 엔트리가 TTL(1h) 동안 그대로 노출되는 걸 막는다. 멱등 함수라 이미
+    # 깨끗한 엔트리에 다시 적용해도 안전하다.
     cached = cache.get(req.message)
     if cached:
+        cached = strip_persona_artifacts(cached)
         await log_call(
             session_id=session_id, user_message=req.message, reply=cached,
             input_tokens=0, output_tokens=0, elapsed_ms=0,
@@ -140,7 +145,10 @@ async def chat(req: ChatReq):
     except Exception as e:
         return err("LLM_ERROR", f"LLM 호출 실패: {e}", 502)
 
-    reply = result["text"]
+    # colbi-qwen(local 엔진)은 프롬프트로 이모지를 금지해도 계속 출력하는 것을
+    # 확인했다 — 여기서 한 번 정제하면 save_message/cache.set/log_call/응답
+    # 반환까지 전부 자동으로 정제된 텍스트를 쓰게 된다(단일 지점).
+    reply = strip_persona_artifacts(result["text"])
     cost_usd = 0.0 if settings.llm_engine == "local" else round(
         _cost(result["input_tokens"], result["output_tokens"]), 8
     )
