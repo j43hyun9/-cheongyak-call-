@@ -29,18 +29,20 @@ _EMOJI_RE = re.compile(
 )
 
 # v6 파인튜닝 데이터셋에 박힌 고정 오프닝/클로징(docs/페르소나_카드.md에 문서화된
-# 5종 + 실측에서 확인된 변형). 원래 설계상 "단서 발견!"·"수사 개시!" 등은
+# 항목 중 내용 없는 순수 장식용 멘트만). 원래 설계상 "단서 발견!"·"수사 개시!" 등은
 # 오프닝, "사건 해결!"·"진실은 하나야!"는 클로징 전용이지만, colbi-qwen은
 # 실제로 이 구분을 지키지 않고 아무 위치에나 섞어 쓴다(예: "수사 개시!"가
 # 문미 클로징으로 나온 사례 실측 확인, 2026-08-21) — 그래서 오프닝/클로징을
 # 구분하지 않고 문두·문미 양쪽에서 전부 검사한다. 문장 "중간"에서 자연스럽게
 # 쓰이는 단서·사건·수사·증거는 건드리지 않도록, 문두/문미에 정확히 그
 # 문구로 시작·끝날 때만 제거한다(앵커링).
+#
+# 주의: "그 단서는 못 줘."(투자 권유 거절 가드레일)와 "내 파일에 없어..."
+# (모르는 종목 안내)는 여기 넣지 않는다 — 페르소나 카드 기준 이 둘은 장식이
+# 아니라 그 자체가 실제 답변 내용이라, 앵커 매칭으로 지워버리면 가드레일
+# 응답이 통째로 삭제되거나 빈 문자열이 될 수 있다(PR #23 리뷰로 실측 확인).
 _FIXED_PHRASES = [
     "단서 발견!",
-    "내 파일에 없어...",
-    "내 파일에 없어…",
-    "그 단서는 못 줘.",
     "수사 개시!",
     "사건 해결!",
     "진실은 하나야!",
@@ -60,7 +62,10 @@ def strip_persona_artifacts(text: str) -> str:
     if not text:
         return text
 
-    cleaned = _EMOJI_RE.sub("", text).strip()
+    # 이모지만 제거한 버전은 별도로 들고 있다가, 아래 고정 멘트 제거 루프가
+    # 답변을 통째로 지워버리는 경우의 안전한 폴백으로 쓴다.
+    emoji_stripped = _EMOJI_RE.sub("", text).strip()
+    cleaned = emoji_stripped
 
     changed = True
     while changed:
@@ -80,5 +85,9 @@ def strip_persona_artifacts(text: str) -> str:
                 changed = True
                 break
 
-    cleaned = _HSPACE_RE.sub(" ", cleaned)
-    return cleaned.strip()
+    cleaned = _HSPACE_RE.sub(" ", cleaned).strip()
+
+    # 정제 결과가 통째로 비어버리면(예: 답변 전체가 고정 멘트 하나뿐이었던
+    # 경우) 빈 문자열을 cache/save/응답으로 내보내는 대신, 이모지만 제거된
+    # 원문으로 되돌린다 — 정제기가 실제 답변 내용을 삭제해서는 안 된다.
+    return cleaned if cleaned else emoji_stripped

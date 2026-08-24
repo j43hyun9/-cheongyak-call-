@@ -110,7 +110,7 @@ export default function ColbyAvatarPage() {
     try {
       chatRes = await postChat(sessionIdRef.current, userText);
     } catch {
-      showError('콜비 응답(chat) 요청에 실패했어요.');
+      showError('콜비와 연결이 원활하지 않아요. 네트워크 상태를 확인하고 다시 시도해주세요.');
       toIdle();
       return;
     }
