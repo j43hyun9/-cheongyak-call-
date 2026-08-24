@@ -207,7 +207,7 @@ export default function ColbyAvatarPage() {
   return (
     <div className="colby-hub">
       <div className="colby-hub__body">
-        <ColbyAvatar state={state} />
+        <ColbyAvatar state={state} audioRef={audioRef} />
         <ColbyChatPanel messages={messages} ipoItems={ipoItems} />
       </div>
 

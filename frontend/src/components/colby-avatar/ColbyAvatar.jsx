@@ -20,12 +20,12 @@ const STATE_BADGES = {
 // AI Human 콜비가 서 있는 좌측 무대(스테이지) 전체를 담당하는 컴포넌트.
 // 캐릭터는 CSS로 그리지 않고, src/assets/colby/의 이미지 에셋을 그대로 사용한다.
 // 이미지가 아직 없으면 깨진 아이콘 대신 "COLBY CHARACTER ASSET" 플레이스홀더를 보여준다.
-export default function ColbyAvatar({ state = COLBY_STATES.IDLE }) {
+export default function ColbyAvatar({ state = COLBY_STATES.IDLE, audioRef }) {
   const badge = STATE_BADGES[state];
-  // speaking일 때만 150~250ms 간격으로 0↔1 전환되는 mouth animation 프레임.
-  // 캐릭터가 "무엇인지"(getColbyImage)와 "언제 바뀌는지"(useSpeakingMouth)는
-  // 서로 다른 파일이라 완전히 분리되어 있다 — TTS 연동 시 이 훅만 교체하면 됨.
-  const mouthFrame = useSpeakingMouth(state);
+  // speaking일 때 실제 TTS 오디오 음량(Web Audio API)에 따라 0(닫힘)~2(열림)로
+  // 바뀌는 mouth animation 프레임. 캐릭터가 "무엇인지"(getColbyImage)와
+  // "언제 바뀌는지"(useSpeakingMouth)는 서로 다른 파일이라 완전히 분리되어 있다.
+  const mouthFrame = useSpeakingMouth(state, audioRef);
   const imageSrc = getColbyImage(state, mouthFrame);
   const [imageFailed, setImageFailed] = useState(false);
 
