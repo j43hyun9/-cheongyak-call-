@@ -1,20 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ColbyAvatar from '../components/colby-avatar/ColbyAvatar';
 import ColbyChatPanel from '../components/colby-avatar/ColbyChatPanel';
 import ColbyActionBar from '../components/colby-avatar/ColbyActionBar';
 import ColbyDevControls from '../components/colby-avatar/ColbyDevControls';
 import useColbyState, { COLBY_STATES } from '../components/colby-avatar/useColbyState';
+import { postStt, postChat, postTts } from '../api';
 
 const GREETING = { role: 'colby', text: '안녕하세요!\n공모주 명탐정 콜비예요.' };
-const DEMO_QUESTION = '이번 주 공모주 알려줘';
-const DEMO_REPLY = '잠시만요, 제가 찾아볼게요! 이번 주 공모주는 이거예요 🔍';
-const DEMO_IPO_ITEMS = [
-  { name: '엔젤로보틱스', start: '2026-08-11', end: '2026-08-12', price: 45000, underwriter: '미래에셋증권' },
-];
 
-// AI Human 콜비 프로토타입 화면.
-// 아직 실제 STT/TTS/RAG를 연결하지 않았으므로, 마이크·텍스트 입력은
-// 정해진 데모 문장으로 상태 전환 흐름만 미리 보여준다 (네트워크 호출 없음).
+function makeSessionId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `session-${Date.now()}`;
+}
+
+// AI Human 콜비 실제 파이프라인 화면.
+// 마이크 녹음(MediaRecorder) → POST /stt → POST /chat → POST /tts → 오디오 재생
+// 순서로 동작한다. 상태 전환은 오디오 재생 이벤트에 연동되며(setTimeout 없음),
+// 어느 단계에서 실패하든 idle로 복귀하고 화면에 짧은 에러 메시지를 남긴다.
 export default function ColbyAvatarPage() {
   const { state, setState, toIdle, toThinking, toSpeaking, toListening } = useColbyState();
   const [messages, setMessages] = useState([GREETING]);
@@ -22,33 +25,183 @@ export default function ColbyAvatarPage() {
   const [ipoItems, setIpoItems] = useState([]);
   const [devMode, setDevMode] = useState(false);
 
-  const runDemoReply = (userText) => {
+  const sessionIdRef = useRef(makeSessionId());
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const streamRef = useRef(null);
+  const audioRef = useRef(null);
+  const audioUrlRef = useRef(null);
+
+  const stopStreamTracks = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  };
+
+  const cleanupAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onplaying = null;
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current = null;
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  };
+
+  // 언마운트 시 마이크 스트림·오디오 리소스 정리
+  useEffect(() => {
+    return () => {
+      stopStreamTracks();
+      cleanupAudio();
+    };
+  }, []);
+
+  const showError = (text) => {
+    setMessages((prev) => [...prev, { role: 'colby', text: `⚠️ ${text}` }]);
+  };
+
+  // TTS 요청 → blob 재생 → 재생 시작 시 speaking, 종료/오류 시 idle.
+  // Audio ended 이벤트가 idle 전환의 유일한 트리거이며, 임의 setTimeout은 없다.
+  const speak = (text) =>
+    new Promise((resolve) => {
+      postTts(text)
+        .then((blob) => {
+          cleanupAudio();
+          const url = URL.createObjectURL(blob);
+          audioUrlRef.current = url;
+          const audio = new Audio(url);
+          audioRef.current = audio;
+
+          const finish = () => {
+            cleanupAudio();
+            toIdle();
+            resolve();
+          };
+
+          audio.onplaying = () => toSpeaking();
+          audio.onended = finish;
+          audio.onerror = () => {
+            showError('오디오 재생에 실패했어요.');
+            finish();
+          };
+
+          audio.play().catch(() => {
+            showError('오디오 재생을 시작할 수 없어요.');
+            finish();
+          });
+        })
+        .catch(() => {
+          showError('음성 합성(TTS) 요청에 실패했어요.');
+          toIdle();
+          resolve();
+        });
+    });
+
+  // POST /chat → answer_text 표시 → speak(answer_text).
+  const sendToColby = async (userText) => {
     setMessages((prev) => [...prev, { role: 'user', text: userText }]);
     setIpoItems([]);
     toThinking();
 
-    setTimeout(() => {
-      toSpeaking();
-      setMessages((prev) => [...prev, { role: 'colby', text: DEMO_REPLY }]);
-      setIpoItems(DEMO_IPO_ITEMS);
+    let chatRes;
+    try {
+      chatRes = await postChat(sessionIdRef.current, userText);
+    } catch {
+      showError('콜비와 연결이 원활하지 않아요. 네트워크 상태를 확인하고 다시 시도해주세요.');
+      toIdle();
+      return;
+    }
 
-      setTimeout(() => toIdle(), 2200);
-    }, 1200);
+    const answerText = chatRes?.answer_text;
+    if (!answerText) {
+      showError('콜비가 답변을 만들지 못했어요. (백엔드 /chat이 아직 answer_text를 반환하지 않을 수 있어요)');
+      toIdle();
+      return;
+    }
+
+    setMessages((prev) => [...prev, { role: 'colby', text: answerText }]);
+    setIpoItems(chatRes?.sources ?? []);
+
+    await speak(answerText);
+  };
+
+  // POST /stt → 인식된 텍스트를 사용자 발화로 표시 → sendToColby
+  const runVoicePipeline = async (audioBlob) => {
+    toThinking();
+
+    let sttText;
+    try {
+      const sttRes = await postStt(audioBlob, sessionIdRef.current);
+      sttText = sttRes?.text?.trim();
+    } catch {
+      showError('음성 인식(STT) 요청에 실패했어요.');
+      toIdle();
+      return;
+    }
+
+    if (!sttText) {
+      showError('음성을 인식하지 못했어요. 다시 시도해주세요.');
+      toIdle();
+      return;
+    }
+
+    await sendToColby(sttText);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        stopStreamTracks();
+        const blob = new Blob(audioChunksRef.current, {
+          type: recorder.mimeType || 'audio/webm',
+        });
+        audioChunksRef.current = [];
+        runVoicePipeline(blob);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      toListening();
+    } catch {
+      showError('마이크 접근에 실패했어요. 브라우저 권한을 확인해주세요.');
+      stopStreamTracks();
+      toIdle();
+    }
+  };
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+  };
+
+  const handleMicClick = () => {
+    if (state === COLBY_STATES.IDLE) {
+      startRecording();
+    } else if (state === COLBY_STATES.LISTENING) {
+      stopRecording();
+    }
   };
 
   const handleSend = () => {
     const text = input.trim();
     if (!text) return;
     setInput('');
-    runDemoReply(text);
-  };
-
-  const handleMicClick = () => {
-    if (state === COLBY_STATES.IDLE) {
-      toListening();
-    } else if (state === COLBY_STATES.LISTENING) {
-      runDemoReply(DEMO_QUESTION);
-    }
+    sendToColby(text);
   };
 
   return (

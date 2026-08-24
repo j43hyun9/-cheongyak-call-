@@ -30,25 +30,64 @@ function mockColbyReply(msg) {
 function delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 // ─── POST /chat ────────────────────────────────────────────────────────────────
+// 실패 시(네트워크 오류·백엔드 다운·터널 timeout 등) mock으로 조용히 대체하지
+// 않고 그대로 throw한다 — postStt/postTts와 동일한 원칙. 백엔드가 실제로
+// 처리 중이거나 응답이 느린 것뿐인데 화면에는 "Mock 모드"처럼 보이는 가짜
+// 성공 응답이 뜨면, 실연동 여부를 사용자도 개발자도 구분할 수 없게 된다.
+// 호출부(ChatPage.jsx/ColbyAvatarPage.jsx)가 catch해서 명확한 오류 상태를
+// 보여주고, 사용자가 다시 시도하도록 한다.
 export async function postChat(session_id, message) {
-  try {
-    const res = await fetch(`${BASE}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id, message }),
-    });
-    if (!res.ok) throw new Error(res.statusText);
-    return await res.json();
-  } catch {
-    await delay(700);
-    const isScheduleQ = ['일정', '청약', 'ipo'].some((k) => message.includes(k));
-    return {
-      answer_text: mockColbyReply(message),
-      sources: isScheduleQ ? MOCK_IPO_ITEMS.slice(0, 2) : [],
-      usage: { model: 'mock', input_tokens: 48, output_tokens: 92, cost_usd: 0 },
-      latency_ms: 700,
-    };
-  }
+  const res = await fetch(`${BASE}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id, message }),
+  });
+  if (!res.ok) throw new Error(`Chat 요청 실패: ${res.status} ${res.statusText}`);
+  return await res.json();
+}
+
+// 프론트 UI만 붙여보고 싶을 때 쓰는 개발용 mock. 실서비스 경로(postChat)에서는
+// 더 이상 자동으로 호출되지 않는다 — 필요한 화면에서 postChat 대신 이 함수를
+// 명시적으로 import해서 써야 한다(실패를 mock으로 위장하지 않기 위한 분리).
+export async function postChatMock(session_id, message) {
+  await delay(700);
+  const isScheduleQ = ['일정', '청약', 'ipo'].some((k) => message.includes(k));
+  return {
+    answer_text: mockColbyReply(message),
+    sources: isScheduleQ ? MOCK_IPO_ITEMS.slice(0, 2) : [],
+    usage: { model: 'mock', input_tokens: 48, output_tokens: 92, cost_usd: 0 },
+    latency_ms: 700,
+  };
+}
+
+// ─── POST /stt ─────────────────────────────────────────────────────────────────
+// audioBlob: MediaRecorder가 만든 오디오 Blob (webm/opus 등).
+// 실패 시 mock으로 대체하지 않고 그대로 throw — 호출부(ColbyAvatarPage)에서
+// catch해서 idle 복귀 + 에러 메시지 표시를 책임진다.
+export async function postStt(audioBlob, session_id = '') {
+  const form = new FormData();
+  form.append('audio', audioBlob, 'audio.webm');
+  form.append('session_id', session_id);
+
+  const res = await fetch(`${BASE}/stt`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) throw new Error(`STT 요청 실패: ${res.status} ${res.statusText}`);
+  return await res.json(); // { text }
+}
+
+// ─── POST /tts ─────────────────────────────────────────────────────────────────
+// 응답이 JSON이 아니라 audio/mpeg 바이너리이므로 blob으로 받는다.
+// 실패 시 mock으로 대체하지 않고 그대로 throw.
+export async function postTts(text) {
+  const res = await fetch(`${BASE}/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(`TTS 요청 실패: ${res.status} ${res.statusText}`);
+  return await res.blob(); // audio/mpeg Blob
 }
 
 // ─── GET /ipo/schedule ─────────────────────────────────────────────────────────
