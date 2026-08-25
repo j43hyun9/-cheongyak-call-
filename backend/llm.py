@@ -1,6 +1,14 @@
+import re
 import time
 from openai import AsyncOpenAI
 from backend.config import settings
+
+
+def _strip_artifact(text: str) -> str:
+    """colbi-qwen이 학습 데이터 포맷(📋 / 📅 블록)을 응답 뒤에 덧붙이는 현상 제거."""
+    # 독립 줄의 📋 이 처음 등장하는 지점부터 끝까지 전부 제거
+    cleaned = re.sub(r'\n+[ \t]*📋[ \t]*[\s\S]*$', '', text)
+    return cleaned.rstrip()
 
 _openai_client: AsyncOpenAI | None = None
 _local_client: AsyncOpenAI | None = None
@@ -38,7 +46,7 @@ async def call_llm(messages: list[dict]) -> dict:
         )
         elapsed_ms = int((time.monotonic() - start) * 1000)
         return {
-            "text": response.choices[0].message.content,
+            "text": _strip_artifact(response.choices[0].message.content),
             "input_tokens": response.usage.prompt_tokens,
             "output_tokens": response.usage.completion_tokens,
             "elapsed_ms": elapsed_ms,
@@ -53,7 +61,7 @@ async def call_llm(messages: list[dict]) -> dict:
         elapsed_ms = int((time.monotonic() - start) * 1000)
         usage = response.usage
         return {
-            "text": response.choices[0].message.content,
+            "text": _strip_artifact(response.choices[0].message.content),
             "input_tokens": usage.prompt_tokens if usage else 0,
             "output_tokens": usage.completion_tokens if usage else 0,
             "elapsed_ms": elapsed_ms,

@@ -107,34 +107,62 @@
   position: relative;
   z-index: 2;
   flex: 1;
+  min-height: 0;
   width: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 12px 24px;
+  overflow: hidden;
 }
 
 .avatar-container {
   position: relative;
   width: min(88%, 480px);
-  height: clamp(340px, 64vh, 600px);
+  /* min-height 제거: 부모보다 커지면 위가 잘리는 문제 방지 */
+  flex: 1;
+  min-height: 0;
+  max-height: 580px;
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 항상 breathing 유지 → 상태 전환 후에도 타이머가 리셋되지 않아 크기 일관성 보장 */
+  animation: colbyBreathe 3.6s ease-in-out infinite;
 }
 
-/* AI Human Avatar Stage — 실제 콜비 캐릭터 이미지가 표시되는 영역.
-   캐릭터는 CSS로 그리지 않고 이미지 파일(또는 플레이스홀더)만 놓는다. */
-.colby-character-image {
+/* speaking 상태: 9개 입 모양 프레임 스택 — opacity만 토글해 깜빡임 방지 */
+.colby-img-stack {
+  position: absolute;
+  inset: 0;
+}
+
+.colby-img-stack__frame {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
-  object-position: center;
-  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.4));
-  transform-origin: center;
+  object-position: top center;
+  will-change: opacity;
+  transition: none;
+}
+
+/* 비speaking 상태: 단일 이미지 — 두 레이어 모두 absolute로 겹치도록 */
+.colby-character-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: top center;
+  transform-origin: top center;
+  image-rendering: high-quality;
 }
 
 .colby-character-placeholder {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: flex;
@@ -168,10 +196,7 @@
    아래 애니메이션은 avatar-container(캐릭터가 담기는 틀) 전체에 적용되므로
    실제 이미지든 플레이스홀더든 동일하게 동작하고, 캐릭터 그림 자체와는 분리되어 있다. */
 
-/* IDLE — 은은한 breathing */
-.colby-hub__stage-panel--idle .avatar-container {
-  animation: colbyBreathe 3.6s ease-in-out infinite;
-}
+/* IDLE — base animation에서 이미 적용 중 (별도 override 불필요) */
 @keyframes colbyBreathe {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.02); }
@@ -202,7 +227,8 @@
 }
 .colby-hub__stage-panel--thinking .colby-hub__glow-ring--a { border-color: rgba(167, 139, 250, 0.4); }
 .colby-hub__stage-panel--thinking .avatar-container {
-  animation: colbyTilt 2.4s ease-in-out infinite;
+  /* colbyBreathe를 동일 spec으로 유지 → 브라우저가 animation 이어받아 재시작 없음 */
+  animation: colbyBreathe 3.6s ease-in-out infinite, colbyTilt 2.4s ease-in-out infinite;
 }
 @keyframes colbyTilt {
   0%, 100% { transform: rotate(0deg); }
@@ -219,7 +245,8 @@
   animation: colbyPulseRing 0.9s ease-out infinite;
 }
 .colby-hub__stage-panel--speaking .avatar-container {
-  animation: colbyBreathe 0.9s ease-in-out infinite;
+  /* none 대신 paused → breathing 타이머가 유지돼 idle 복귀 시 재시작 없음 */
+  animation-play-state: paused;
 }
 
 /* speaking 상태에서 캐릭터 주변에 뜨는 음성 waveform.

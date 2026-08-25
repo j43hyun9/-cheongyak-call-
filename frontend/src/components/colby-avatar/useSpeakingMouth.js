@@ -1,38 +1,75 @@
 import { useEffect, useRef, useState } from 'react';
 import { COLBY_STATES } from './useColbyState';
 
-const DEFAULT_INTERVAL_MS = 300; // 3프레임 바운스 기준 기본값
+const VOWEL_MAP = {
+  'ㅏ':'open','ㅑ':'open',
+  'ㅐ':'ae','ㅒ':'ae',
+  'ㅓ':'eo','ㅕ':'eo',
+  'ㅔ':'mid','ㅖ':'mid',
+  'ㅡ':'eu',
+  'ㅣ':'wide','ㅢ':'wide',
+  'ㅗ':'round','ㅛ':'round','ㅚ':'round','ㅘ':'round','ㅙ':'round',
+  'ㅜ':'pucker','ㅠ':'pucker','ㅟ':'pucker','ㅝ':'pucker','ㅞ':'pucker',
+};
 
-// 0(닫힘)→1(살짝 벌림)→2(활짝 벌림)→1(살짝 벌림)→반복 순서로
-// 자연스럽게 오가는 바운스 시퀀스.
-const BOUNCE_SEQUENCE = [0, 1, 2, 1];
+// 유니코드 한글 → 중성(모음) 추출
+function extractVowel(char) {
+  const code = char.charCodeAt(0) - 0xAC00;
+  if (code < 0 || code > 11171) return null;
+  const jungIdx = Math.floor((code % 588) / 28);
+  const JUNGSEONG = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
+  return JUNGSEONG[jungIdx] ?? null;
+}
 
-// SPEAKING 상태일 때만 입 벌림 프레임(0|1|2)을 반복 전환하는
-// "타이밍 전용" 훅. 어떤 이미지 파일을 쓸지는 전혀 모른다(관심사 분리).
-//
-// 나중에 실제 TTS를 붙일 때는 이 훅 대신, TTS 재생 시작 시점에 프레임을
-// 켜고(setInterval 시작) 재생 종료 시점에 끄는 방식으로 그대로 교체하면 된다.
-// (오디오 볼륨에 맞춰 더 정교한 립싱크로 확장할 때도 이 훅의 "프레임 번호를
-// 반환한다"는 인터페이스만 유지하면 ColbyAvatar.jsx는 수정할 필요 없음.)
-export default function useSpeakingMouth(state, intervalMs = DEFAULT_INTERVAL_MS) {
-  const [frameIndex, setFrameIndex] = useState(0);
+// 텍스트에서 대표 입 모양 결정 (첫 번째 한글의 모음 기준)
+function textToMouthKey(text) {
+  for (const char of text) {
+    const vowel = extractVowel(char);
+    if (vowel) return VOWEL_MAP[vowel] ?? 'mid';
+  }
+  return 'mid';
+}
+
+// visemeQueue: [{offsetMs, text}, ...] — /tts 응답의 word_boundary 배열
+export default function useSpeakingMouth(state, visemeQueue = null) {
+  const [mouthKey, setMouthKey] = useState('closed');
   const timerRef = useRef(null);
-  const stepRef = useRef(0);
+  const stepRef  = useRef(0);
+  const timeoutRefs = useRef([]);
 
   useEffect(() => {
+    clearInterval(timerRef.current);
+    timeoutRefs.current.forEach(clearTimeout);
+    timeoutRefs.current = [];
+
     if (state !== COLBY_STATES.SPEAKING) {
-      setFrameIndex(0);
+      setMouthKey('closed');
       stepRef.current = 0;
-      return undefined;
+      return;
     }
 
+    // ── 1순위: WordBoundary 타임스탬프 기반 ──────────────────────────────
+    if (visemeQueue && visemeQueue.length > 0) {
+      visemeQueue.forEach(({ offsetMs, text }) => {
+        const key = textToMouthKey(text);
+        const t = setTimeout(() => setMouthKey(key), offsetMs);
+        timeoutRefs.current.push(t);
+      });
+      // 마지막 단어 후 400ms에 닫힘
+      const last = visemeQueue[visemeQueue.length - 1];
+      const closeT = setTimeout(() => setMouthKey('closed'), last.offsetMs + 400);
+      timeoutRefs.current.push(closeT);
+      return () => timeoutRefs.current.forEach(clearTimeout);
+    }
+
+    // ── 2순위: 고정 바운스 폴백 (visemeQueue 없을 때) ─────────────────────
+    const BOUNCE = ['closed', 'mid', 'open', 'round', 'open', 'mid'];
     timerRef.current = setInterval(() => {
-      stepRef.current = (stepRef.current + 1) % BOUNCE_SEQUENCE.length;
-      setFrameIndex(BOUNCE_SEQUENCE[stepRef.current]);
-    }, intervalMs);
-
+      stepRef.current = (stepRef.current + 1) % BOUNCE.length;
+      setMouthKey(BOUNCE[stepRef.current]);
+    }, 200);
     return () => clearInterval(timerRef.current);
-  }, [state, intervalMs]);
+  }, [state, visemeQueue]);
 
-  return frameIndex;
+  return mouthKey;
 }

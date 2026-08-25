@@ -70,16 +70,18 @@ DELETE /schedules/{id}            → {ok:true}
 - 순서: `git checkout develop && git pull` → `git checkout -b feature/기능명` → 작업 → push → PR (제목에 담당자명)
 - 커밋: feat / fix / refactor / chore / docs : 한 줄 설명
 
-## 현재 develop 상태 (머지 기준 — 바뀔 때 갱신, 2026-08-19 기준 · 마감 2026-08-24)
+## 현재 develop 상태 (머지 기준 — 바뀔 때 갱신, 2026-08-20 기준 · 마감 2026-08-24)
 - ✅ 2차 기반 (유지): /chat·/ipo/schedule·CRUD·크롤러·캐시·SQLite·페르소나 v6·QLoRA 데이터셋·Ollama local 엔진
 - ✅ STT 고도화·FastAPI 연결 (임강, PR#13·#14)
 - ✅ TTS 고도화·/tts 백엔드 통합 (김준서·임강, PR#17)
 - ✅ RAG backend/rag 이동·슬랭 개선·colbi-qwen 검증 (장두호, PR#16)
-- ⏳ **대기 중 (머지 순서 엄수)**:
-  - PR#15 `/chat` v1 스키마 (`answer_text`·`audio_url`·`state`) — 임강
-  - PR#18 RAG·/chat 연동·크래시버그 수정 — 임강·장두호
-  - PR#19 AI Human 프론트·아바타·상태머신·Lip Sync — 백승옥 *(#15 머지 후 같이 또는 직후)*
-- 🔜 **머지 후 남은 작업**: STT→/chat(RAG)→TTS→아바타 립싱크 실제 API 연결 (백승옥)
+- ✅ `/chat` v1 스키마 (`answer_text`·`audio_url`·`state`) — 임강 (PR#15)
+- ✅ RAG·/chat 연동·크래시버그 수정 — 임강·장두호 (PR#18)
+- ✅ AI Human 프론트·아바타·상태머신·Lip Sync — 백승옥 (PR#19)
+- 🔜 **남은 작업 (마감 8/24)**:
+  - STT→/chat(RAG)→TTS→아바타 립싱크 **실제 API 연결 최종 확인** (백승옥)
+  - 전체 통합 테스트 (8/20~8/21)
+  - 보고서·발표자료·데모 시나리오 확정 (8/22~8/23)
 
 ## 팀원 담당 인계점 (2026-08-11 3차 기준)
 - **전재형(PM)** — FastAPI 구조 / API 설계 / 전체 통합 / 발표·문서. CLAUDE.md 단독 관리.

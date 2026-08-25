@@ -22,5 +22,8 @@ class Settings(BaseSettings):
 
     cache_ttl_seconds: int = 3600        # 응답 캐시 TTL (1h)
 
+    did_api_key: str = ""               # D-ID API key (username:password 형태)
+    heygen_api_key: str = ""            # HeyGen API key
+
 
 settings = Settings()

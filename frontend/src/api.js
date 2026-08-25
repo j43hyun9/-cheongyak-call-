@@ -109,6 +109,48 @@ export async function updateSchedule(id, title, datetime) {
   }
 }
 
+// ─── POST /tts ─────────────────────────────────────────────────────────────────
+export async function postTts(text) {
+  const res = await fetch(`${BASE}/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(res.statusText);
+  const data = await res.json();
+  const binary = atob(data.audio);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'audio/mpeg' });
+  return { blob, wordBoundary: data.word_boundary ?? [] };
+}
+
+// ─── POST /tts/video (SadTalker 립싱크 영상) ──────────────────────────────────
+export async function postTtsVideo(text) {
+  const res = await fetch(`${BASE}/tts/video`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(res.statusText);
+  const data = await res.json();
+  const binary = atob(data.audio);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'audio/mpeg' });
+  // video_url: null이면 SadTalker 실패 → 기존 이미지 스왑 폴백
+  return { blob, wordBoundary: data.word_boundary ?? [], videoUrl: data.video_url ?? null };
+}
+
+// ─── POST /stt ─────────────────────────────────────────────────────────────────
+export async function postStt(audioBlob) {
+  const fd = new FormData();
+  fd.append('audio', audioBlob, 'recording.webm');
+  const res = await fetch(`${BASE}/stt`, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(res.statusText);
+  return await res.json(); // { text, elapsed_ms, engine }
+}
+
 // ─── DELETE /schedules/:id ─────────────────────────────────────────────────────
 export async function deleteSchedule(id) {
   try {

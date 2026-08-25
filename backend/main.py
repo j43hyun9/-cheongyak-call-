@@ -5,12 +5,14 @@
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 import edge_tts
 from fastapi import FastAPI, File, Form, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend import cache
@@ -29,6 +31,7 @@ from backend.db import (
 from backend.ipo_crawler import fetch_all_ipo, filter_ipo
 from backend.llm import call_llm
 from backend.persona.colbi import build_messages
+from backend.preset_qa import lookup as preset_lookup
 from backend.rag.colbi_rag import init_index, retrieve
 from backend.stt import is_supported_content_type, transcribe
 
@@ -70,6 +73,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# SadTalker 립싱크 영상 정적 파일 서빙
+_SADTALKER_OUTPUT = Path(__file__).parent.parent / "frontend" / "public" / "sadtalker_output"
+_SADTALKER_OUTPUT.mkdir(parents=True, exist_ok=True)
+app.mount("/sadtalker_output", StaticFiles(directory=str(_SADTALKER_OUTPUT)), name="sadtalker_output")
+
 
 # ── /health ───────────────────────────────────────────────────
 
@@ -108,7 +116,21 @@ async def chat(req: ChatReq):
 
     session_id = req.session_id or str(uuid.uuid4())
 
-    # 1. 응답 캐시 확인
+    # 1-a. 사전 정의 답변 확인 (LLM 호출 없이 즉시 반환, TTL 없음)
+    preset = preset_lookup(req.message)
+    if preset:
+        await log_call(
+            session_id=session_id, user_message=req.message, reply=preset,
+            input_tokens=0, output_tokens=0, elapsed_ms=0,
+            engine="preset", cache_hit=True, cost_usd=0.0,
+        )
+        return ChatResp(
+            answer_text=preset, audio_url=None, state="speaking", sources=[],
+            usage=UsageOut(model="preset", input_tokens=0, output_tokens=0, cost_usd=0.0),
+            latency_ms=0,
+        )
+
+    # 1-b. 응답 캐시 확인
     cached = cache.get(req.message)
     if cached:
         await log_call(
@@ -271,15 +293,78 @@ async def logs_summary():
 class TTSRequest(BaseModel):
     text: str
 
-async def _generate_audio(text: str) -> bytes:
-    communicate = edge_tts.Communicate(text, "ko-KR-SunHiNeural")
+def _clean_for_tts(text: str) -> str:
+    import re
+    # 이모지/기호 제거 (ZWJ=‍, variation=️, keycap=⃣ 포함)
+    text = re.sub(
+        '[\U0001F000-\U0001FFFF\U00002500-\U00002BFF‍️⃣]+',
+        '', text
+    )
+    # 마크다운 굵게/기울임/취소선
+    text = re.sub(r'\*{1,3}|_{1,3}|~~', '', text)
+    # 마크다운 헤더
+    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+    # 코드블록/인라인 코드
+    text = re.sub(r'```[\s\S]*?```|`[^`]*`', '', text)
+    # 마크다운 링크 → 텍스트만
+    text = re.sub(r'!?\[([^\]]*)\]\([^\)]*\)', r'\1', text)
+    # 마크다운 인용/테이블
+    text = re.sub(r'^[>|]\s*', '', text, flags=re.MULTILINE)
+    # 불릿 기호
+    text = re.sub(r'^[-•·]\s+', '', text, flags=re.MULTILINE)
+    # TTS가 이상하게 읽는 특수문자
+    text = re.sub(r'[/\\~@#^&<>|%{}=+]', ' ', text)
+    # 연속 공백/줄바꿈 정리
+    text = re.sub(r'\n{2,}', ' ', text)
+    text = re.sub(r'\s{2,}', ' ', text)
+    return text.strip()
+
+def _expand_to_syllables(text: str, offset_ms: int, duration_ms: int) -> list:
+    # 완성형 한글 음절만 추출 (0xAC00~0xD7A3)
+    syllables = [c for c in text if '가' <= c <= '힣']
+    if not syllables:
+        return [{"offsetMs": offset_ms, "text": text}]
+    ms_per = duration_ms / len(syllables)
+    return [
+        {"offsetMs": int(offset_ms + i * ms_per), "text": syl}
+        for i, syl in enumerate(syllables)
+    ]
+
+async def _generate_audio(text: str):
+    import base64
+    text = _clean_for_tts(text)
+    communicate = edge_tts.Communicate(text, "ko-KR-HyunsuMultilingualNeural", pitch="+20Hz")
     audio_bytes = bytearray()
+    boundaries = []
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
             audio_bytes.extend(chunk["data"])
-    return bytes(audio_bytes)
+        elif chunk["type"] in ("WordBoundary", "SentenceBoundary"):
+            # offset/duration 단위: 100-nanosecond → ms
+            offset_ms   = chunk["offset"]   // 10000
+            duration_ms = chunk.get("duration", 0) // 10000
+            # 어절 → 음절 단위로 쪼개서 각 음절에 타임스탬프 배분
+            boundaries.extend(_expand_to_syllables(chunk["text"], offset_ms, duration_ms))
+    return base64.b64encode(bytes(audio_bytes)).decode(), boundaries
 
 @app.post("/tts", tags=["tts"])
 async def tts_endpoint(request: TTSRequest):
-    audio_bytes = await _generate_audio(request.text)
-    return Response(content=audio_bytes, media_type="audio/mpeg")
+    audio_b64, word_boundary = await _generate_audio(request.text)
+    return {"audio": audio_b64, "word_boundary": word_boundary}
+
+
+@app.post("/tts/video", tags=["tts"])
+async def tts_video_endpoint(request: TTSRequest):
+    """TTS 오디오 + HeyGen 립싱크 영상 생성. video_url이 None이면 생성 실패."""
+    import base64
+    from backend.heygen import generate_lipsync
+
+    audio_b64, word_boundary = await _generate_audio(request.text)
+    audio_bytes = base64.b64decode(audio_b64)
+
+    video_url = await generate_lipsync(audio_bytes)
+    return {
+        "audio": audio_b64,
+        "word_boundary": word_boundary,
+        "video_url": video_url,
+    }
